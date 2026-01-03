@@ -333,3 +333,11 @@ class PandasApiTdsFrame(PyLegendTdsFrame):
             suffix: PyLegendOptional[str] = None
     ) -> "PandasApiTdsFrame":
         pass  # pragma: no cover
+
+    @abstractmethod
+    def diff(
+            self,
+            periods: int = 1,
+            axis: PyLegendUnion[int, str] = 0
+    ) -> "PandasApiTdsFrame":
+        pass  # pragma: no cover

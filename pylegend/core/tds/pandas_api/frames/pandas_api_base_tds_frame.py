@@ -750,6 +750,22 @@ class PandasApiBaseTdsFrame(PandasApiTdsFrame, BaseTdsFrame, metaclass=ABCMeta):
         ))
 
     @abstractmethod
+    def diff(
+            self,
+            periods: int = 1,
+            axis: PyLegendUnion[int, str] = 0
+    ) -> "PandasApiTdsFrame":
+        from pylegend.core.tds.pandas_api.frames.pandas_api_applied_function_tds_frame import (
+            PandasApiAppliedFunctionTdsFrame
+        )
+        from pylegend.core.tds.pandas_api.frames.functions.diff_function import DiffFunction
+        return PandasApiAppliedFunctionTdsFrame(DiffFunction(
+            base_frame=self,
+            periods=periods,
+            axis=axis
+        ))
+
+    @abstractmethod
     def get_super_type(self) -> PyLegendType[PyLegendTdsFrame]:
         pass  # pragma: no cover
 
