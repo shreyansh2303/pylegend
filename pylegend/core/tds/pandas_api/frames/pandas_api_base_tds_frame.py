@@ -805,7 +805,6 @@ class PandasApiBaseTdsFrame(PandasApiTdsFrame, BaseTdsFrame, metaclass=ABCMeta):
             )
         )
 
-    @abstractmethod
     def diff(
             self,
             periods: int = 1,
