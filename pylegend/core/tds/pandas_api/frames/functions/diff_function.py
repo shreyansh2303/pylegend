@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from copy import deepcopy
 from pylegend._typing import (
     PyLegendCallable,
-    PyLegendHashable,
     PyLegendList,
     PyLegendOptional,
     PyLegendSequence,
@@ -36,6 +36,8 @@ from pylegend.core.language.shared.helpers import (
 from pylegend.core.language.shared.literal_expressions import convert_literal_to_literal_expression
 from pylegend.core.language.shared.primitives.primitive import PyLegendPrimitive
 from pylegend.core.sql.metamodel import (
+    ArithmeticExpression,
+    ArithmeticType,
     Expression,
     IntegerLiteral,
     QualifiedName,
@@ -45,7 +47,6 @@ from pylegend.core.sql.metamodel import (
     SingleColumn,
 )
 from pylegend.core.sql.metamodel_extension import WindowExpression
-from pylegend.core.tds.pandas_api.frames.functions.shift_function import ShiftFunction
 from pylegend.core.tds.pandas_api.frames.pandas_api_applied_function_tds_frame import PandasApiAppliedFunction
 from pylegend.core.tds.pandas_api.frames.pandas_api_base_tds_frame import PandasApiBaseTdsFrame
 from pylegend.core.tds.pandas_api.frames.pandas_api_groupby_tds_frame import PandasApiGroupbyTdsFrame
@@ -54,7 +55,7 @@ from pylegend.core.tds.tds_column import TdsColumn
 from pylegend.core.tds.tds_frame import FrameToPureConfig, FrameToSqlConfig
 
 
-class DiffFunction(ShiftFunction):
+class DiffFunction(PandasApiAppliedFunction):
     __base_frame: PyLegendUnion[PandasApiBaseTdsFrame, PandasApiGroupbyTdsFrame]
     __periods: int
     __axis: PyLegendUnion[int, str]
@@ -85,6 +86,132 @@ class DiffFunction(ShiftFunction):
         self._zero_column_name = "__pylegend_internal_column_name__"
         self._temp_column_name_suffix = "__pylegend_internal_column_name__"
 
+    def to_sql(self, config: FrameToSqlConfig) -> QuerySpecification:
+
+        base_query = self.base_frame().to_sql_query_object(config)
+        db_extension = config.sql_to_string_generator().get_db_extension()
+
+        base_query.select.selectItems.append(
+            SingleColumn(alias=db_extension.quote_identifier(self._zero_column_name), expression=IntegerLiteral(0)))
+
+        new_query: QuerySpecification = create_sub_query(base_query, config, "root")
+        new_select_items: list[SelectItem] = deepcopy(base_query.select.selectItems[:-1])
+
+        def generate_lambda_func(column_name: str) -> PyLegendCallable[
+                [PandasApiPartialFrame, PandasApiWindowReference, PandasApiTdsRow],
+                PyLegendPrimitive
+        ]:
+            if self.__periods > 0:
+                def lambda_func(
+                        p: PandasApiPartialFrame,
+                        w: PandasApiWindowReference,
+                        r: PandasApiTdsRow
+                ) -> PyLegendPrimitive:
+                    return p.lag(r, self.__periods)[column_name]
+            else:
+                def lambda_func(
+                        p: PandasApiPartialFrame,
+                        w: PandasApiWindowReference,
+                        r: PandasApiTdsRow
+                ) -> PyLegendPrimitive:
+                    return p.lead(r, -self.__periods)[column_name]
+            return lambda_func
+
+        self._column_expression_and_window_tuples = self._construct_column_expression_and_window_tuples(generate_lambda_func)
+
+        for c, window in self._column_expression_and_window_tuples:
+            col_sql_expr: Expression = c[1].to_sql_expression({"r": new_query}, config)
+            window_expr = WindowExpression(
+                nested=col_sql_expr,
+                window=window.to_sql_node(new_query, config))
+
+            new_select_items.append(
+                SingleColumn(
+                    alias=db_extension.quote_identifier(c[0] + self._temp_column_name_suffix),
+                    expression=window_expr))
+
+        new_query.select.selectItems = new_select_items
+
+        new_query = create_sub_query(new_query, config, "root")
+
+        final_select_items: list[SelectItem] = []
+        for col in self.calculate_columns():
+            col_name: str = col.get_name()
+            left_column = QualifiedNameReference(QualifiedName(
+                [db_extension.quote_identifier("root"),
+                 db_extension.quote_identifier(col_name)]))
+            right_column = QualifiedNameReference(QualifiedName(
+                [db_extension.quote_identifier("root"),
+                 db_extension.quote_identifier(col_name + self._temp_column_name_suffix)]))
+            final_expression = ArithmeticExpression(
+                type_=ArithmeticType.SUBTRACT,
+                left=left_column,
+                right=right_column)
+
+            final_select_items.append(
+                SingleColumn(
+                    alias=db_extension.quote_identifier(col_name),
+                    expression=final_expression))
+
+        new_query.select.selectItems = final_select_items
+
+        return new_query
+    
+    def to_pure(self, config: FrameToPureConfig) -> str:
+
+        def generate_lambda_func(column_name: str) -> PyLegendCallable[
+                [PandasApiPartialFrame, PandasApiWindowReference, PandasApiTdsRow],
+                PyLegendPrimitive
+        ]:
+            if self.__periods > 0:
+                def lambda_func(
+                        p: PandasApiPartialFrame,
+                        w: PandasApiWindowReference,
+                        r: PandasApiTdsRow
+                ) -> PyLegendPrimitive:
+                    return r[column_name] - p.lag(r, self.__periods)[column_name]
+            else:
+                def lambda_func(
+                        p: PandasApiPartialFrame,
+                        w: PandasApiWindowReference,
+                        r: PandasApiTdsRow
+                ) -> PyLegendPrimitive:
+                    return r[column_name] - p.lead(r, -self.__periods)[column_name]
+            return lambda_func
+
+        self._column_expression_and_window_tuples = self._construct_column_expression_and_window_tuples(generate_lambda_func)
+
+        def render_single_column_expression(c: PyLegendTuple[str, PyLegendPrimitive]) -> str:
+            escaped_col_name: str = escape_column_name(c[0] + self._temp_column_name_suffix)
+            expr_str: str = (c[1].to_pure_expression(config) if isinstance(c[1], PyLegendPrimitive) else
+                             convert_literal_to_literal_expression(c[1]).to_pure_expression(config))
+            return f"{escaped_col_name}:{generate_pure_lambda('p,w,r', expr_str)}"
+
+        extend_0_column = f"->extend(~{self._zero_column_name}:{{r|0}})"
+
+        extend_strs: PyLegendList[str] = []
+        for c, window in self._column_expression_and_window_tuples:
+            window_expression: str = window.to_pure_expression(config)
+            extend_strs.append(
+                f"->extend({window_expression}, ~{render_single_column_expression(c)})")
+        extend_str: str = f"{config.separator(1)}".join(extend_strs)
+
+        project_str: str = "->project(~[" + \
+            ", ".join([f"{escape_column_name(c[0])}:p|$p.{escape_column_name(c[0] + self._temp_column_name_suffix)}"
+                       for c, _ in self._column_expression_and_window_tuples]) + \
+            "])"
+
+        return f"{self.base_frame().to_pure(config)}{config.separator(1)}" + \
+            f"{extend_0_column}{config.separator(1)}{extend_str}{config.separator(1)}{project_str}"
+
+
+    def base_frame(self) -> PandasApiBaseTdsFrame:
+        if isinstance(self.__base_frame, PandasApiGroupbyTdsFrame):
+            return self.__base_frame.base_frame()
+        return self.__base_frame
+    
+    def tds_frame_parameters(self) -> PyLegendList["PandasApiBaseTdsFrame"]:
+        return []
 
     def calculate_columns(self) -> PyLegendSequence["TdsColumn"]:
 
@@ -112,18 +239,25 @@ class DiffFunction(ShiftFunction):
         valid_periods: PyLegendList[int] = [1, -1]
         if self.__periods not in valid_periods:
             raise NotImplementedError(
-                f"The 'periods' argument of the shift function is only supported for the values of {valid_periods}"
-                f" or a list of these, but got: periods={self.__periods!r}")
+                f"The 'periods' argument of the diff function is only supported for values {valid_periods},"
+                f" but got: periods={self.__periods!r}")
 
         if self.__axis not in [0, "index"]:
             raise NotImplementedError(
-                f"The 'axis' argument of the shift function must be 0 or 'index', but got: axis={self.__axis!r}")
-
-        self._column_expression_and_window_tuples = self._construct_column_expression_and_window_tuples()
+                f"The 'axis' argument of the diff function must be 0 or 'index', but got: axis={self.__axis!r}")
 
         return True
 
-    def _construct_column_expression_and_window_tuples(self) -> PyLegendList[
+    def _construct_column_expression_and_window_tuples(
+            self,
+            generate_lambda_func: PyLegendCallable[
+                [str],
+                PyLegendCallable[
+                    [PandasApiPartialFrame, PandasApiWindowReference, PandasApiTdsRow],
+                    PyLegendPrimitive
+                ]
+            ]
+    ) -> PyLegendList[
         PyLegendTuple[
             PyLegendTuple[str, PyLegendPrimitive],
             PandasApiWindow
@@ -144,8 +278,6 @@ class DiffFunction(ShiftFunction):
         else:
             column_names = [col.get_name() for col in self.base_frame().columns()]
 
-        periods_list: PyLegendList[int] = [self.__periods] if isinstance(self.__periods, int) else list(self.__periods)
-
         extend_columns: PyLegendList[
             PyLegendTuple[
                 str,
@@ -156,34 +288,9 @@ class DiffFunction(ShiftFunction):
             ]
         ] = []
 
-        for period in periods_list:
-            for column_name in column_names:
-                if isinstance(self.__periods, int):
-                    current_col_name = column_name
-                else:
-                    suffix = self.__suffix if self.__suffix is not None else ""
-                    current_col_name = f"{column_name}{suffix}_{period}"
-
-                if period > 0:
-                    def lambda_func(
-                            p: PandasApiPartialFrame,
-                            w: PandasApiWindowReference,
-                            r: PandasApiTdsRow,
-                            column_name: str = column_name,
-                            period: int = period
-                    ) -> PyLegendPrimitive:
-                        return p[column_name] - p.lag(r, period)[column_name]
-                else:
-                    def lambda_func(
-                            p: PandasApiPartialFrame,
-                            w: PandasApiWindowReference,
-                            r: PandasApiTdsRow,
-                            column_name: str = column_name,
-                            period: int = period
-                    ) -> PyLegendPrimitive:
-                        return p[column_name] - p.lead(r, -period)[column_name]
-
-                extend_columns.append((current_col_name, lambda_func))
+        for column_name in column_names:
+            lambda_func = generate_lambda_func(column_name)
+            extend_columns.append((column_name, lambda_func))
 
         tds_row = PandasApiTdsRow.from_tds_frame("r", self.base_frame())
         partial_frame = PandasApiPartialFrame(base_frame=self.base_frame(), var_name="p")

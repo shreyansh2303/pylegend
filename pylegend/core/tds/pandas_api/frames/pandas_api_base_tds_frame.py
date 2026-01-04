@@ -749,7 +749,6 @@ class PandasApiBaseTdsFrame(PandasApiTdsFrame, BaseTdsFrame, metaclass=ABCMeta):
             suffix=suffix
         ))
 
-    @abstractmethod
     def diff(
             self,
             periods: int = 1,
