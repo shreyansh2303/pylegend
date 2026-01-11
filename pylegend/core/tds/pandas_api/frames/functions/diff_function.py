@@ -144,9 +144,9 @@ class DiffFunction(PandasApiAppliedFunction):
                 [db_extension.quote_identifier("root"),
                  db_extension.quote_identifier(col_name + self._temp_column_name_suffix)]))
             final_expression = ArithmeticExpression(
-                type_=ArithmeticType.SUBTRACT,
-                left=left_column,
-                right=right_column)
+                ArithmeticType.SUBTRACT,
+                left_column,
+                right_column)
 
             final_select_items.append(
                 SingleColumn(
