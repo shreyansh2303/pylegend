@@ -44,7 +44,7 @@ from pylegend.core.sql.metamodel import (
     SortItem,
     SortItemNullOrdering,
     SortItemOrdering,
-    Window
+    Window, WindowFrame, Node, WindowFrameMode, FrameBound, FrameBoundType
 )
 from pylegend.core.tds.tds_frame import FrameToPureConfig, FrameToSqlConfig
 
@@ -169,8 +169,79 @@ class PandasApiDirectSortInfo(PandasApiSortInfo):
         self._null_ordering = null_ordering
 
 
+class PandasApiFrameBoundType(Enum):
+    UNBOUNDED_PRECEDING = 1,
+    PRECEDING = 2,
+    CURRENT_ROW = 3,
+    FOLLOWING = 4,
+    UNBOUNDED_FOLLOWING = 5
+
+    def to_sql_node(self) -> FrameBoundType:
+        pandas_api_to_sql_node_map = {
+            PandasApiFrameBoundType.UNBOUNDED_PRECEDING: FrameBoundType.UNBOUNDED_PRECEDING,
+            PandasApiFrameBoundType.PRECEDING: FrameBoundType.PRECEDING,
+            PandasApiFrameBoundType.CURRENT_ROW: FrameBoundType.CURRENT_ROW,
+            PandasApiFrameBoundType.FOLLOWING: FrameBoundType.FOLLOWING,
+            PandasApiFrameBoundType.UNBOUNDED_FOLLOWING: FrameBoundType.UNBOUNDED_FOLLOWING
+        }
+        return pandas_api_to_sql_node_map[self]
+
+
+class PandasApiFrameBound:
+    type_: "PandasApiFrameBoundType"
+    value: "PyLegendOptional[Expression]"
+
+    def __init__(
+            self,
+            type_: "PandasApiFrameBoundType",
+            value: "PyLegendOptional[Expression]"
+    ) -> None:
+        self.type_ = type_
+        self.value = value
+
+    def to_sql_node(self) -> FrameBound:
+        return FrameBound(
+            type_=self.type_.to_sql_node(),
+            value=self.value
+        )
+
+
+class PandasApiWindowFrameMode(Enum):
+    RANGE = 1,
+    ROWS = 2
+
+    def to_sql_node(self) -> WindowFrameMode:
+        pandas_api_to_sql_node_map = {
+            PandasApiWindowFrameMode.RANGE: WindowFrameMode.RANGE,
+            PandasApiWindowFrameMode.ROWS: WindowFrameMode.ROWS
+        }
+        return pandas_api_to_sql_node_map[self]
+
+
 class PandasApiWindowFrame(metaclass=ABCMeta):
-    pass
+    __mode: PandasApiWindowFrameMode
+    __start: PandasApiFrameBound
+    __end: PyLegendOptional[PandasApiFrameBound]
+
+    def __init__(
+            self,
+            mode: PandasApiWindowFrameMode,
+            start: PandasApiFrameBound,
+            end: PyLegendOptional[PandasApiFrameBound]
+    ):
+        self.__mode = mode
+        self.__start = start
+        self.__end = end
+
+    def to_sql_node(self):
+        return WindowFrame(
+            mode=self.__mode.to_sql_node(),
+            start=self.__start.to_sql_node(),
+            end=(
+                None if self.__end is None else
+                self.__end.to_sql_node()
+            )
+        )
 
 
 class PandasApiWindow:
