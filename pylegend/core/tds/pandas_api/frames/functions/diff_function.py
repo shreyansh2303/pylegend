@@ -92,7 +92,8 @@ class DiffFunction(PandasApiAppliedFunction):
         db_extension = config.sql_to_string_generator().get_db_extension()
 
         base_query.select.selectItems.append(
-            SingleColumn(alias=db_extension.quote_identifier(self._zero_column_name), expression=IntegerLiteral(0)))
+            SingleColumn(alias=db_extension.quote_identifier(self._zero_column_name), expression=IntegerLiteral(0))
+        )
 
         new_query: QuerySpecification = create_sub_query(base_query, config, "root")
         new_select_items: list[SelectItem] = deepcopy(base_query.select.selectItems[:-1])
@@ -123,12 +124,15 @@ class DiffFunction(PandasApiAppliedFunction):
             col_sql_expr: Expression = c[1].to_sql_expression({"r": new_query}, config)
             window_expr = WindowExpression(
                 nested=col_sql_expr,
-                window=window.to_sql_node(new_query, config))
+                window=window.to_sql_node(new_query, config)
+            )
 
             new_select_items.append(
                 SingleColumn(
                     alias=db_extension.quote_identifier(c[0] + self._temp_column_name_suffix),
-                    expression=window_expr))
+                    expression=window_expr
+                )
+            )
 
         new_query.select.selectItems = new_select_items
 
@@ -137,21 +141,26 @@ class DiffFunction(PandasApiAppliedFunction):
         final_select_items: list[SelectItem] = []
         for col in self.calculate_columns():
             col_name: str = col.get_name()
-            left_column = QualifiedNameReference(QualifiedName(
-                [db_extension.quote_identifier("root"),
-                 db_extension.quote_identifier(col_name)]))
-            right_column = QualifiedNameReference(QualifiedName(
-                [db_extension.quote_identifier("root"),
-                 db_extension.quote_identifier(col_name + self._temp_column_name_suffix)]))
+            left_column = QualifiedNameReference(QualifiedName([
+                db_extension.quote_identifier("root"),
+                db_extension.quote_identifier(col_name)
+            ]))
+            right_column = QualifiedNameReference(QualifiedName([
+                db_extension.quote_identifier("root"),
+                db_extension.quote_identifier(col_name + self._temp_column_name_suffix)
+            ]))
             final_expression = ArithmeticExpression(
                 ArithmeticType.SUBTRACT,
                 left_column,
-                right_column)
+                right_column
+            )
 
             final_select_items.append(
                 SingleColumn(
                     alias=db_extension.quote_identifier(col_name),
-                    expression=final_expression))
+                    expression=final_expression
+                )
+            )
 
         new_query.select.selectItems = final_select_items
 
@@ -183,8 +192,7 @@ class DiffFunction(PandasApiAppliedFunction):
 
         def render_single_column_expression(c: PyLegendTuple[str, PyLegendPrimitive]) -> str:
             escaped_col_name: str = escape_column_name(c[0] + self._temp_column_name_suffix)
-            expr_str: str = (c[1].to_pure_expression(config) if isinstance(c[1], PyLegendPrimitive) else
-                             convert_literal_to_literal_expression(c[1]).to_pure_expression(config))
+            expr_str: str = c[1].to_pure_expression(config)
             return f"{escaped_col_name}:{generate_pure_lambda('p,w,r', expr_str)}"
 
         extend_0_column = f"->extend(~{self._zero_column_name}:{{r|0}})"
@@ -193,16 +201,21 @@ class DiffFunction(PandasApiAppliedFunction):
         for c, window in self._column_expression_and_window_tuples:
             window_expression: str = window.to_pure_expression(config)
             extend_strs.append(
-                f"->extend({window_expression}, ~{render_single_column_expression(c)})")
+                f"->extend({window_expression}, ~{render_single_column_expression(c)})"
+            )
         extend_str: str = f"{config.separator(1)}".join(extend_strs)
 
-        project_str: str = "->project(~[" + \
-            ", ".join([f"{escape_column_name(c[0])}:p|$p.{escape_column_name(c[0] + self._temp_column_name_suffix)}"
-                       for c, _ in self._column_expression_and_window_tuples]) + \
-            "])"
+        project_str = (
+                "->project(~[" +
+                ", ".join([f"{escape_column_name(c[0])}:p|$p.{escape_column_name(c[0] + self._temp_column_name_suffix)}"
+                           for c, _ in self._column_expression_and_window_tuples]) +
+                "])"
+        )
 
-        return f"{self.base_frame().to_pure(config)}{config.separator(1)}" + \
-            f"{extend_0_column}{config.separator(1)}{extend_str}{config.separator(1)}{project_str}"
+        return (
+                f"{self.base_frame().to_pure(config)}{config.separator(1)}"
+                f"{extend_0_column}{config.separator(1)}{extend_str}{config.separator(1)}{project_str}"
+        )
 
 
     def base_frame(self) -> PandasApiBaseTdsFrame:
@@ -215,7 +228,7 @@ class DiffFunction(PandasApiAppliedFunction):
 
     def calculate_columns(self) -> PyLegendSequence["TdsColumn"]:
 
-        source_columns: PyLegendSequence["TdsColumn"]
+        source_columns: PyLegendList["TdsColumn"]
 
         if isinstance(self.__base_frame, PandasApiGroupbyTdsFrame):
             grouping_column_names = set([col.get_name() for col in self.__base_frame.get_grouping_columns()])
@@ -230,7 +243,7 @@ class DiffFunction(PandasApiAppliedFunction):
             else:
                 source_columns = selected_columns
         else:
-            source_columns = self.base_frame().columns()
+            source_columns = list(self.base_frame().columns())
 
         return source_columns
 
