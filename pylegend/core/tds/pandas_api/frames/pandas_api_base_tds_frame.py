@@ -764,6 +764,25 @@ class PandasApiBaseTdsFrame(PandasApiTdsFrame, BaseTdsFrame, metaclass=ABCMeta):
             axis=axis
         ))
 
+    def pct_change(
+            self,
+            periods: int = 1,
+            freq: PyLegendOptional[str] = None,
+            axis: PyLegendUnion[int, str] = 0,
+            **kwargs: PyLegendPrimitiveOrPythonPrimitive
+    ) -> "PandasApiTdsFrame":
+        from pylegend.core.tds.pandas_api.frames.pandas_api_applied_function_tds_frame import (
+            PandasApiAppliedFunctionTdsFrame
+        )
+        from pylegend.core.tds.pandas_api.frames.functions.pct_change_function import PctChangeFunction
+        return PandasApiAppliedFunctionTdsFrame(PctChangeFunction(
+            base_frame=self,
+            periods=periods,
+            freq=freq,
+            axis=axis,
+            **kwargs
+        ))
+
     @abstractmethod
     def get_super_type(self) -> PyLegendType[PyLegendTdsFrame]:
         pass  # pragma: no cover
