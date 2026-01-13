@@ -147,18 +147,23 @@ class PctChangeFunction(PandasApiAppliedFunction):
         final_select_items: list[SelectItem] = []
         for col in self.calculate_columns():
             col_name: str = col.get_name()
-            left_column = QualifiedNameReference(QualifiedName([
+            left_expression = QualifiedNameReference(QualifiedName([
                 db_extension.quote_identifier("root"),
                 db_extension.quote_identifier(col_name)
             ]))
-            right_column = QualifiedNameReference(QualifiedName([
+            right_expression = QualifiedNameReference(QualifiedName([
                 db_extension.quote_identifier("root"),
                 db_extension.quote_identifier(col_name + self._temp_column_name_suffix)
             ]))
-            final_expression = ArithmeticExpression(
+            diff_expression = ArithmeticExpression(
                 ArithmeticType.SUBTRACT,
-                left_column,
-                right_column
+                left_expression,
+                right_expression
+            )
+            final_expression = ArithmeticExpression(
+                ArithmeticType.DIVIDE,
+                diff_expression,
+                right_expression
             )
 
             final_select_items.append(
@@ -184,14 +189,16 @@ class PctChangeFunction(PandasApiAppliedFunction):
                         w: PandasApiWindowReference,
                         r: PandasApiTdsRow
                 ) -> PyLegendPrimitive:
-                    return r[column_name] - p.lag(r, self.__periods)[column_name]
+                    prev = p.lag(r, self.__periods)[column_name]
+                    return (r[column_name] - prev) / prev
             else:
                 def lambda_func(
                         p: PandasApiPartialFrame,
                         w: PandasApiWindowReference,
                         r: PandasApiTdsRow
                 ) -> PyLegendPrimitive:
-                    return r[column_name] - p.lead(r, -self.__periods)[column_name]
+                    prev = p.lead(r, -self.__periods)[column_name]
+                    return (r[column_name] - prev) / prev
             return lambda_func
 
         self._column_expression_and_window_tuples = self._construct_column_expression_and_window_tuples(generate_lambda_func)
@@ -219,8 +226,10 @@ class PctChangeFunction(PandasApiAppliedFunction):
         )
 
         return (
-            f"{self.base_frame().to_pure(config)}{config.separator(1)}"
-            f"{extend_0_column}{config.separator(1)}{extend_str}{config.separator(1)}{project_str}"
+                f"{self.base_frame().to_pure(config)}{config.separator(1)}"
+                f"{extend_0_column}{config.separator(1)}"
+                f"{extend_str}{config.separator(1)}"
+                f"{project_str}"
         )
 
     def base_frame(self) -> PandasApiBaseTdsFrame:
@@ -275,6 +284,18 @@ class PctChangeFunction(PandasApiAppliedFunction):
             formatted_args = ", ".join(f"{k}={v!r}" for k, v in self.__kwargs.items())
             raise NotImplementedError(
                 f"Passing additional keyword arguments to the pct_change function is not supported, but got: {formatted_args}"
+            )
+
+        valid_column_types = ["Integer", "Float", "Number"]
+        mismatched_columns: PyLegendList[TdsColumn] = []
+        for col in self.calculate_columns():
+            if col.get_type() not in valid_column_types:
+                mismatched_columns.append(col)
+
+        if len(mismatched_columns) > 0:
+            raise TypeError(
+                f"The diff function can only be applied to the following column types: {valid_column_types}, "
+                f"but got the following invalid columns: {[str(col) for col in mismatched_columns]}"
             )
 
         return True
