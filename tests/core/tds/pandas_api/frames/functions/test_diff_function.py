@@ -67,6 +67,24 @@ class TestErrorsOnBaseFrame:
             "The 'periods' argument of the diff function is only supported for values [1, -1], but got: periods=-3")
         assert v.value.args[0] == expected_msg
 
+    def test_non_numeric_columns(self) -> None:
+        columns = [
+            PrimitiveTdsColumn.integer_column("col1"),
+            PrimitiveTdsColumn.string_column("col2"),
+            PrimitiveTdsColumn.datetime_column("col3"),
+        ]
+        frame: PandasApiTdsFrame = PandasApiTableSpecInputFrame(["test_schema", "test_table"], columns)
+
+        with pytest.raises(TypeError) as v:
+            frame.diff(periods=-1)
+
+        expected_msg = (
+            f"The diff function can only be applied to the following column types: "
+            f"['Integer', 'Float', 'Number'], but got the following invalid columns: "
+            f"['TdsColumn(Name: col2, Type: String)', 'TdsColumn(Name: col3, Type: DateTime)']"
+        )
+        assert v.value.args[0] == expected_msg
+
 
 class TestUsageOnBaseFrame:
     if USE_LEGEND_ENGINE:
@@ -362,5 +380,34 @@ class TestEndToEndUsageOnBaseFrame:
 
         pylegend_output = frame.diff(periods=-1).execute_frame_to_pandas_df()
         pandas_output = pandas_df_simple_person.diff(periods=-1)
+
+        assert_frame_equal(pylegend_output, pandas_output)
+
+
+class TestEndToEndUsageOnGroupbyFrame:
+
+    @pytest.mark.skip(reason="Legend server doesn't execute this SQL")
+    def test_positive_periods(
+            self,
+            legend_test_server: PyLegendDict[str, PyLegendUnion[int,]],
+            pandas_df_simple_person: pd.DataFrame
+    ) -> None:
+        frame: PandasApiTdsFrame = simple_relation_trade_service_frame_pandas_api(legend_test_server["engine_port"])
+
+        pylegend_output = frame.groupby("Product/Name")[["Id", "Quantity"]].diff().execute_frame_to_pandas_df()
+        pandas_output = pandas_df_simple_person.groupby("Product/Name")[["Id", "Quantity"]].diff()
+
+        assert_frame_equal(pylegend_output, pandas_output)
+
+    @pytest.mark.skip(reason="Legend server doesn't execute this SQL")
+    def test_negative_periods(
+            self,
+            legend_test_server: PyLegendDict[str, PyLegendUnion[int,]],
+            pandas_df_simple_person: pd.DataFrame
+    ) -> None:
+        frame: PandasApiTdsFrame = simple_relation_trade_service_frame_pandas_api(legend_test_server["engine_port"])
+
+        pylegend_output = frame.groupby("Product/Name")[["Id", "Quantity"]].diff(periods=-1).execute_frame_to_pandas_df()
+        pandas_output = pandas_df_simple_person.groupby("Product/Name")[["Id", "Quantity"]].diff(periods=-1)
 
         assert_frame_equal(pylegend_output, pandas_output)
