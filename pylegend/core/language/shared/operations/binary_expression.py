@@ -17,11 +17,13 @@ from pylegend._typing import (
     PyLegendSequence,
     PyLegendDict,
     PyLegendCallable,
+    PyLegendUnion,
 )
 from pylegend.core.language.shared.expression import (
     PyLegendExpression,
 )
 from pylegend.core.language.shared.helpers import expr_has_matching_start_and_end_parentheses
+from pylegend.core.language.shared.pure_expression import PureExpression
 from pylegend.core.sql.metamodel import (
     Expression,
     QuerySpecification,
@@ -82,7 +84,7 @@ class PyLegendBinaryExpression(PyLegendExpression, metaclass=ABCMeta):
             config
         )
 
-    def to_pure_expression(self, config: FrameToPureConfig) -> str:
+    def to_pure_expression(self, config: FrameToPureConfig) -> PyLegendUnion[str, PureExpression]:
         op1_expr = self.__operand1.to_pure_expression(config)
         if self.__first_operand_needs_to_be_non_nullable:
             op1_expr = (

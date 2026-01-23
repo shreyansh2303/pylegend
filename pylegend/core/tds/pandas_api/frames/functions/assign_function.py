@@ -34,6 +34,7 @@ from pylegend.core.language import (
 from pylegend.core.language.pandas_api.pandas_api_tds_row import PandasApiTdsRow
 from pylegend.core.language.shared.helpers import escape_column_name
 from pylegend.core.language.shared.literal_expressions import convert_literal_to_literal_expression
+from pylegend.core.language.shared.pure_expression import PrerequisitePureExpression, PureExpression
 from pylegend.core.sql.metamodel import (
     QuerySpecification,
     SingleColumn,
@@ -102,11 +103,17 @@ class AssignFunction(PandasApiAppliedFunction):
         tds_row = PandasApiTdsRow.from_tds_frame("c", self.__base_frame)
         base_cols = [c.get_name() for c in self.__base_frame.columns()]
 
+        prerequisite_exprs: PyLegendList[str] = []
         assigned_exprs: PyLegendDict[str, str] = {}
         for col, func in self.__col_definitions.items():
             res = func(tds_row)
             res_expr = res if isinstance(res, PyLegendPrimitive) else convert_literal_to_literal_expression(res)
-            assigned_exprs[col] = res_expr.to_pure_expression(config)
+            pure_expr = res_expr.to_pure_expression(config)
+            if isinstance(pure_expr, str):
+                assigned_exprs[col] = pure_expr
+            elif isinstance(pure_expr, PureExpression):
+                prerequisite_exprs.extend(pure_expr.get_all_prerequisite_exprs())
+                assigned_exprs[col] = pure_expr.get_project_expr(tds_row_alias='c')
 
         # build project clauses
         clauses: PyLegendList[str] = []
@@ -117,31 +124,17 @@ class AssignFunction(PandasApiAppliedFunction):
             else:
                 clauses.append(f"{escape_column_name(col)}:c|$c.{escape_column_name(col)}")
 
-        extend_strs = []
         for col, pure_expr in assigned_exprs.items():
             if col not in base_cols:
-                extend_limits = self.find_all_extend_spans(pure_expr)
+                clauses.append(f"{escape_column_name(col)}:c|{pure_expr}")
 
-                if len(extend_limits) == 0:
-                    clauses.append(f"{escape_column_name(col)}:c|{pure_expr}")
-
-                else:
-                    new_expr = pure_expr
-                    for start, end in reversed(extend_limits):
-                        extend_str = pure_expr[start: end + 1]
-                        extend_strs.append(extend_str)
-                        col_name = f"$c.{self.find_col_name_in_extend(extend_str)}"
-                        new_expr = new_expr[:start] + col_name + new_expr[end + 1:]
-
-                    clauses.append(f"{escape_column_name(col)}:c|{new_expr}")
-
-        extend_str = f"{config.separator(1).join(extend_strs)}"
-        if len(extend_str) > 0:
-            extend_str += f"{config.separator(1)}"
+        prerequisite_str = f"{config.separator(1).join(prerequisite_exprs)}"
+        if len(prerequisite_str) > 0:
+            prerequisite_str += f"{config.separator(1)}"
 
         return (
             f"{self.__base_frame.to_pure(config)}{config.separator(1)}"
-            f"{extend_str}"
+            f"{prerequisite_str}"
             f"->project(~[{', '.join(clauses)}])"
         )
 

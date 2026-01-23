@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
+from typing import cast, Protocol, runtime_checkable
+
 import pandas as pd
 
 from pylegend._typing import (
@@ -25,6 +28,7 @@ from pylegend._typing import (
     PyLegendOptional,
     PyLegendTypeVar
 )
+from pylegend.core.language.pandas_api.pandas_api_aggregate_specification import PyLegendAggInput
 from pylegend.core.language.pandas_api.pandas_api_tds_row import PandasApiTdsRow
 from pylegend.core.language.shared.column_expressions import PyLegendColumnExpression
 from pylegend.core.language.shared.expression import (
@@ -43,7 +47,7 @@ from pylegend.core.language.shared.primitives.datetime import PyLegendDateTime
 from pylegend.core.language.shared.primitives.float import PyLegendFloat
 from pylegend.core.language.shared.primitives.integer import PyLegendInteger
 from pylegend.core.language.shared.primitives.number import PyLegendNumber
-from pylegend.core.language.shared.primitives.primitive import PyLegendPrimitive
+from pylegend.core.language.shared.primitives.primitive import PyLegendPrimitive, PyLegendPrimitiveOrPythonPrimitive
 from pylegend.core.language.shared.primitives.strictdate import PyLegendStrictDate
 from pylegend.core.language.shared.primitives.string import PyLegendString
 from pylegend.core.sql.metamodel import (
@@ -52,7 +56,9 @@ from pylegend.core.sql.metamodel import (
 from pylegend.core.sql.metamodel import QuerySpecification
 from pylegend.core.sql.metamodel_extension import WindowExpression
 from pylegend.core.tds.abstract.frames.base_tds_frame import BaseTdsFrame
+from pylegend.core.tds.pandas_api.frames.functions.filter import PandasApiFilterFunction
 from pylegend.core.tds.pandas_api.frames.functions.rank_function import RankFunction
+from pylegend.core.tds.pandas_api.frames.pandas_api_applied_function_tds_frame import PandasApiAppliedFunctionTdsFrame
 from pylegend.core.tds.result_handler import ResultHandler
 from pylegend.core.tds.tds_column import TdsColumn
 from pylegend.core.tds.tds_frame import FrameToPureConfig
@@ -77,20 +83,32 @@ __all__: PyLegendSequence[str] = [
 R = PyLegendTypeVar('R')
 
 
+@runtime_checkable
+class SupportsToSqlExpression(Protocol):
+    def to_sql_expression(
+            self,
+            frame_name_to_base_query_map: PyLegendDict[str, QuerySpecification],
+            config: FrameToSqlConfig
+    ) -> Expression:
+        ...
+
+
+@runtime_checkable
+class SupportsToPureExpression(Protocol):
+    def to_pure_expression(self, config: FrameToPureConfig) -> str:
+        ...
+
+
 class Series(PyLegendColumnExpression, PyLegendPrimitive, BaseTdsFrame):
     def __init__(self, base_frame: PyLegendUnion["PandasApiTdsFrame", "PandasApiGroupbyTdsFrame"], column: str):
-        from pylegend.core.tds.pandas_api.frames.pandas_api_groupby_tds_frame import PandasApiGroupbyTdsFrame
-
-        if isinstance(base_frame, PandasApiGroupbyTdsFrame):
-            row = PandasApiTdsRow.from_tds_frame("c", base_frame.base_frame())
-            self.__base_frame = base_frame.base_frame()
-            self._filtered_frame = base_frame
-        else:
-            row = PandasApiTdsRow.from_tds_frame("c", base_frame)
-            self.__base_frame = base_frame
-            self._filtered_frame = base_frame.filter(items=[column])
-
+        row = PandasApiTdsRow.from_tds_frame("c", base_frame)
         PyLegendColumnExpression.__init__(self, row=row, column=column)
+
+        self.__base_frame = base_frame
+
+        filtered = base_frame.filter(items=[column])
+        assert isinstance(filtered, PandasApiAppliedFunctionTdsFrame)
+        self._filtered_frame: PandasApiAppliedFunctionTdsFrame = filtered
 
     def value(self) -> PyLegendColumnExpression:
         return self
@@ -104,27 +122,25 @@ class Series(PyLegendColumnExpression, PyLegendPrimitive, BaseTdsFrame):
             config: FrameToSqlConfig
     ) -> Expression:
         applied_func = self._filtered_frame.get_applied_function()
-        if isinstance(applied_func, RankFunction):
-            for c, window in applied_func.construct_column_expression_and_window_tuples():
-                if c[0] == self.columns()[0].get_name():
-                    return WindowExpression(
-                        nested=c[1].to_sql_expression(frame_name_to_base_query_map, config),
-                        window=window.to_sql_node(frame_name_to_base_query_map["c"], config),
-                    )
+        if not isinstance(applied_func, PandasApiFilterFunction):
+            if isinstance(applied_func, SupportsToSqlExpression):
+                return applied_func.to_sql_expression(frame_name_to_base_query_map, config)
+            else:
+                raise NotImplementedError(
+                    f"The '{applied_func.name()}' function cannot provide a SQL expression"
+                )
+
         return super().to_sql_expression(frame_name_to_base_query_map, config)
 
     def to_pure_expression(self, config: FrameToPureConfig) -> str:
         applied_func = self._filtered_frame.get_applied_function()
-        suffix = "__internal_pylegend_column__"
-        if isinstance(applied_func, RankFunction):
-            extend_strs: PyLegendList[str] = []
-            for c, window in applied_func.construct_column_expression_and_window_tuples():
-                window_expression: str = window.to_pure_expression(config)
-                extend_strs.append(
-                    f"->extend({window_expression}, ~{applied_func.render_single_column_expression(c, suffix, config)})"
+        if not isinstance(applied_func, PandasApiFilterFunction):
+            if isinstance(applied_func, SupportsToPureExpression):
+                return applied_func.to_pure_expression(config)
+            else:
+                raise NotImplementedError(
+                    f"The '{applied_func.name()}' function cannot provide a pure expression"
                 )
-            extend_str = f"{config.separator(1)}".join(extend_strs)
-            return extend_str
 
         return super().to_pure_expression(config)
 
@@ -166,44 +182,160 @@ class Series(PyLegendColumnExpression, PyLegendPrimitive, BaseTdsFrame):
     def get_all_tds_frames(self) -> PyLegendSequence["BaseTdsFrame"]:
         return self._filtered_frame.get_all_tds_frames()  # type: ignore
 
-    def rank(
+    def aggregate(
+            self,
+            func: PyLegendAggInput,
+            axis: PyLegendUnion[int, str] = 0,
+            *args: PyLegendPrimitiveOrPythonPrimitive,
+            **kwargs: PyLegendPrimitiveOrPythonPrimitive
+    ) -> "PandasApiTdsFrame":
+        new_series = copy.copy(self)
+        filtered_frame = new_series._filtered_frame.aggregate(func, axis, *args, **kwargs)
+        return filtered_frame
+
+    def agg(
+            self,
+            func: PyLegendAggInput,
+            axis: PyLegendUnion[int, str] = 0,
+            *args: PyLegendPrimitiveOrPythonPrimitive,
+            **kwargs: PyLegendPrimitiveOrPythonPrimitive
+    ) -> "PandasApiTdsFrame":
+        return self.aggregate(func, axis, *args, **kwargs)
+
+    def sum(
             self,
             axis: PyLegendUnion[int, str] = 0,
-            method: str = 'min',
+            skipna: bool = True,
             numeric_only: bool = False,
-            na_option: str = 'bottom',
-            ascending: bool = True,
-            pct: bool = False
-    ) -> "Series":
-        from pylegend.core.tds.pandas_api.frames.pandas_api_groupby_tds_frame import PandasApiGroupbyTdsFrame
+            min_count: int = 0,
+            **kwargs: PyLegendPrimitiveOrPythonPrimitive
+    ) -> "PandasApiTdsFrame":
+        if axis not in [0, "index"]:
+            raise NotImplementedError(f"The 'axis' parameter must be 0 or 'index' in sum function, but got: {axis}")
+        if skipna is not True:
+            raise NotImplementedError("skipna=False is not currently supported in sum function. "
+                                      "SQL aggregation ignores nulls by default.")
+        if numeric_only is not False:
+            raise NotImplementedError("numeric_only=True is not currently supported in sum function.")
+        if min_count != 0:
+            raise NotImplementedError(f"min_count must be 0 in sum function, but got: {min_count}")
+        if len(kwargs) > 0:
+            raise NotImplementedError(
+                f"Additional keyword arguments not supported in sum function: {list(kwargs.keys())}")
+        return self.aggregate("sum", 0)
 
-        if pct:
-            new_series = FloatSeries(self._filtered_frame, self.columns()[0].get_name())
-        else:
-            new_series = IntegerSeries(self._filtered_frame, self.columns()[0].get_name())
-        new_series.__base_frame = self.__base_frame
-        if isinstance(self._filtered_frame, PandasApiGroupbyTdsFrame):
-            if numeric_only:
-                raise ValueError(
-                    "The numeric_only argument is not supported when the rank function is applied on a GroupBy frame"
-                )
-            new_series._filtered_frame = new_series._filtered_frame.rank(
-                axis=axis,
-                method=method,
-                na_option=na_option,
-                ascending=ascending,
-                pct=pct
-            )
-        else:
-            new_series._filtered_frame = new_series._filtered_frame.rank(
-                axis=axis,
-                method=method,
-                numeric_only=numeric_only,
-                na_option=na_option,
-                ascending=ascending,
-                pct=pct
-            )
-        return new_series
+    def mean(
+            self,
+            axis: PyLegendUnion[int, str] = 0,
+            skipna: bool = True,
+            numeric_only: bool = False,
+            **kwargs: PyLegendPrimitiveOrPythonPrimitive
+    ) -> "PandasApiTdsFrame":
+        if axis not in [0, "index"]:
+            raise NotImplementedError(f"The 'axis' parameter must be 0 or 'index' in mean function, but got: {axis}")
+        if skipna is not True:
+            raise NotImplementedError("skipna=False is not currently supported in mean function.")
+        if numeric_only is not False:
+            raise NotImplementedError("numeric_only=True is not currently supported in mean function.")
+        if len(kwargs) > 0:
+            raise NotImplementedError(
+                f"Additional keyword arguments not supported in mean function: {list(kwargs.keys())}")
+        return self.aggregate("mean", 0)
+
+    def min(
+            self,
+            axis: PyLegendUnion[int, str] = 0,
+            skipna: bool = True,
+            numeric_only: bool = False,
+            **kwargs: PyLegendPrimitiveOrPythonPrimitive
+    ) -> "PandasApiTdsFrame":
+        if axis not in [0, "index"]:
+            raise NotImplementedError(f"The 'axis' parameter must be 0 or 'index' in min function, but got: {axis}")
+        if skipna is not True:
+            raise NotImplementedError("skipna=False is not currently supported in min function.")
+        if numeric_only is not False:
+            raise NotImplementedError("numeric_only=True is not currently supported in min function.")
+        if len(kwargs) > 0:
+            raise NotImplementedError(
+                f"Additional keyword arguments not supported in min function: {list(kwargs.keys())}")
+        return self.aggregate("min", 0)
+
+    def max(
+            self,
+            axis: PyLegendUnion[int, str] = 0,
+            skipna: bool = True,
+            numeric_only: bool = False,
+            **kwargs: PyLegendPrimitiveOrPythonPrimitive
+    ) -> "PandasApiTdsFrame":
+        if axis not in [0, "index"]:
+            raise NotImplementedError(f"The 'axis' parameter must be 0 or 'index' in max function, but got: {axis}")
+        if skipna is not True:
+            raise NotImplementedError("skipna=False is not currently supported in max function.")
+        if numeric_only is not False:
+            raise NotImplementedError("numeric_only=True is not currently supported in max function.")
+        if len(kwargs) > 0:
+            raise NotImplementedError(
+                f"Additional keyword arguments not supported in max function: {list(kwargs.keys())}")
+        return self.aggregate("max", 0)
+
+    def std(
+            self,
+            axis: PyLegendUnion[int, str] = 0,
+            skipna: bool = True,
+            ddof: int = 1,
+            numeric_only: bool = False,
+            **kwargs: PyLegendPrimitiveOrPythonPrimitive
+    ) -> "PandasApiTdsFrame":
+        if axis not in [0, "index"]:
+            raise NotImplementedError(f"The 'axis' parameter must be 0 or 'index' in std function, but got: {axis}")
+        if skipna is not True:
+            raise NotImplementedError("skipna=False is not currently supported in std function.")
+        if ddof != 1:
+            raise NotImplementedError(
+                f"Only ddof=1 (Sample Standard Deviation) is supported in std function, but got: {ddof}")
+        if numeric_only is not False:
+            raise NotImplementedError("numeric_only=True is not currently supported in std function.")
+        if len(kwargs) > 0:
+            raise NotImplementedError(
+                f"Additional keyword arguments not supported in std function: {list(kwargs.keys())}")
+        return self.aggregate("std", 0)
+
+    def var(
+            self,
+            axis: PyLegendUnion[int, str] = 0,
+            skipna: bool = True,
+            ddof: int = 1,
+            numeric_only: bool = False,
+            **kwargs: PyLegendPrimitiveOrPythonPrimitive
+    ) -> "PandasApiTdsFrame":
+        if axis not in [0, "index"]:
+            raise NotImplementedError(f"The 'axis' parameter must be 0 or 'index' in var function, but got: {axis}")
+        if skipna is not True:
+            raise NotImplementedError("skipna=False is not currently supported in var function.")
+        if ddof != 1:
+            raise NotImplementedError(f"Only ddof=1 (Sample Variance) is supported in var function, but got: {ddof}")
+        if numeric_only is not False:
+            raise NotImplementedError("numeric_only=True is not currently supported in var function.")
+        if len(kwargs) > 0:
+            raise NotImplementedError(
+                f"Additional keyword arguments not supported in var function: {list(kwargs.keys())}")
+        return self.aggregate("var", 0)
+
+    def count(
+            self,
+            axis: PyLegendUnion[int, str] = 0,
+            numeric_only: bool = False,
+            **kwargs: PyLegendPrimitiveOrPythonPrimitive
+    ) -> "PandasApiTdsFrame":
+        if axis not in [0, "index"]:
+            raise NotImplementedError(f"The 'axis' parameter must be 0 or 'index' in count function, but got: {axis}")
+        if numeric_only is not False:
+            raise NotImplementedError("numeric_only=True is not currently supported in count function.")
+        if len(kwargs) > 0:
+            raise NotImplementedError(
+                f"Additional keyword arguments not supported in count function: {list(kwargs.keys())}")
+        return self.aggregate("count", 0)
+
 
 
 class BooleanSeries(Series, PyLegendBoolean, PyLegendExpressionBooleanReturn):  # type: ignore

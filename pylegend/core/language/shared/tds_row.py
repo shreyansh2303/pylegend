@@ -59,7 +59,8 @@ class AbstractTdsRow(metaclass=ABCMeta):
     __columns: PyLegendSequence[TdsColumn]
 
     def __init__(self, frame_name: str, frame: PyLegendTdsFrame) -> None:
-        self.__frame_name = frame_name
+        print(f"frame name = {frame_name}")
+        self.__frame_name = "r"
         self.__columns = frame.columns()
 
     def get_boolean(self, column: str) -> PyLegendBoolean:
