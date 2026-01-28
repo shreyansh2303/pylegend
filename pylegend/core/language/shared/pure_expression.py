@@ -57,3 +57,11 @@ class PureExpression:
     def get_final_expr(self, tds_row_alias: str) -> str:  # not implemented properly
         column_name = self._internal_column_name + '1'
         return f"${tds_row_alias}.{column_name}"
+
+
+def combine_pure_expressions(
+        expr1: PureExpression,
+        expr2: PureExpression,
+        operation: str
+) -> PureExpression:
+    pass
