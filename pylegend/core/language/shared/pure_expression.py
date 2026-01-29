@@ -11,57 +11,74 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import uuid
+from abc import ABC, abstractmethod
 
 from pylegend._typing import (
     PyLegendList,
-    PyLegendOptional,
+    PyLegendTuple
 )
 
 
-class PrerequisitePureExpression:
+class PureExpression(ABC):
+    @abstractmethod
+    def compile(self, tds_row_alias: str) -> PyLegendTuple[PyLegendList[str], str]:
+        pass  # pragma: no cover
+
+    @staticmethod
+    def from_raw_string(raw_string: str) -> "PureExpression":
+        return StringPureExpression(raw_string)
+
+    @staticmethod
+    def from_prerequisite_expr(raw_string: str) -> "PureExpression":
+        return StringPureExpression(raw_string)
+
+
+class StringPureExpression(PureExpression):
     _pure_expr: str
-    _column_alias: str
 
-    def __init__(self, pure_expr: str, column_alias: str):
+    def __init__(self, pure_expr: str):
         self._pure_expr = pure_expr
-        self._column_alias = column_alias
 
-    def get_prerequisite_expr(self, column_name: PyLegendOptional[str]=None):
-        if column_name is not None:
-            return self._pure_expr.replace(self._column_alias, column_name)
-        return self._pure_expr
+    def compile(self, tds_row_alias: str) -> PyLegendTuple[PyLegendList[str], str]:
+        return [], self._pure_expr
 
 
-class PureExpression:
-    _prerequisite_expr_list: PyLegendList[PrerequisitePureExpression]
-    _final_expr: str
-    _internal_column_name: str
+class PrerequisitePureExpression(PureExpression):
+    _prerequisite_expr: str
+    _column_name: str
 
-    def __init__(
-            self,
-            prerequisite_expr_list: PyLegendList[PrerequisitePureExpression],
-            final_expr: str,
-            internal_column_name: str = "__INTERNAL_COLUMN_NAME__",
-    ):
-        self._prerequisite_expr_list = prerequisite_expr_list
-        self._final_expr = final_expr
-        self._internal_column_name = internal_column_name
+    def __init__(self, prerequisite_expr: str, column_name: str):
+        self._prerequisite_expr = prerequisite_expr
+        self._column_name = column_name
 
-    def get_all_prerequisite_exprs(self) -> PyLegendList[str]:
-        exprs: PyLegendList[str] = []
-        for i, prerequisite_expr in enumerate(self._prerequisite_expr_list):
-            column_name = self._internal_column_name + str(i)
-            exprs.append(prerequisite_expr.get_prerequisite_expr(column_name))
-        return exprs
+        new_column_name = str(uuid.uuid4())
+        self._change_column_name(new_column_name)
 
-    def get_final_expr(self, tds_row_alias: str) -> str:  # not implemented properly
-        column_name = self._internal_column_name + '1'
-        return f"${tds_row_alias}.{column_name}"
+    def compile(self, tds_row_alias: str) -> PyLegendTuple[PyLegendList[str], str]:
+        final_expr = f"${tds_row_alias}.{self._column_name}"
+        return [self._prerequisite_expr], final_expr
+
+    def _change_column_name(self, new_column_name) -> None:
+        self._prerequisite_expr = self._prerequisite_expr.replace(self._column_name, new_column_name)
+        self._column_name = new_column_name
 
 
-def combine_pure_expressions(
-        expr1: PureExpression,
-        expr2: PureExpression,
-        operation: str
-) -> PureExpression:
-    pass
+class CompositePureExpression(PureExpression):
+    _left: PureExpression
+    _right: PureExpression
+    _operation: str
+
+    def __init__(self, left: PureExpression, right: PureExpression, operation: str):
+        self._left = left
+        self._right = right
+        self._operation = operation
+
+    def compile(self, tds_row_alias: str) -> PyLegendTuple[PyLegendList[str], str]:
+        prerequisites_left, expression_left = self._left.compile(tds_row_alias)
+        prerequisites_right, expression_right = self._right.compile(tds_row_alias)
+
+        combined_prerequisites = prerequisites_left + prerequisites_right
+        combined_expression = f"{expression_left} {self._operation} {expression_right}"
+
+        return combined_prerequisites, combined_expression

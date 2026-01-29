@@ -122,6 +122,7 @@ class Series(PyLegendColumnExpression, PyLegendPrimitive, BaseTdsFrame):
             config: FrameToSqlConfig
     ) -> Expression:
         applied_func = self._filtered_frame.get_applied_function()
+        print(f"{applied_func.name()} applied function")
         if not isinstance(applied_func, PandasApiFilterFunction):
             if isinstance(applied_func, SupportsToSqlExpression):
                 return applied_func.to_sql_expression(frame_name_to_base_query_map, config)
@@ -336,6 +337,22 @@ class Series(PyLegendColumnExpression, PyLegendPrimitive, BaseTdsFrame):
                 f"Additional keyword arguments not supported in count function: {list(kwargs.keys())}")
         return self.aggregate("count", 0)
 
+    def rank(
+            self,
+            axis: PyLegendUnion[int, str] = 0,
+            method: str = 'min',
+            numeric_only: bool = False,
+            na_option: str = 'bottom',
+            ascending: bool = True,
+            pct: bool = False
+    ) -> "Series":
+        new_series = copy.copy(self)
+        applied_function_frame = self._filtered_frame.rank(
+            axis, method, numeric_only, na_option, ascending, pct
+        )
+        assert isinstance(applied_function_frame, PandasApiAppliedFunctionTdsFrame)
+        new_series._filtered_frame = applied_function_frame
+        return new_series
 
 
 class BooleanSeries(Series, PyLegendBoolean, PyLegendExpressionBooleanReturn):  # type: ignore

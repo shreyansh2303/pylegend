@@ -11,8 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 
 from pylegend._typing import (
+    PyLegendDict,
     PyLegendUnion,
     PyLegendList,
     PyLegendSequence,
@@ -132,6 +134,28 @@ class RankFunction(PandasApiAppliedFunction):
         new_query.select.selectItems = final_select_items
 
         return new_query
+
+    def to_sql_expression(
+            self,
+            frame_name_to_base_query_map: PyLegendDict[str, QuerySpecification],
+            config: FrameToSqlConfig
+    ) -> Expression:
+        base_frame_columns = self.__base_frame.columns()
+        assert len(base_frame_columns) == 1, (
+            "To get an SQL expression, the base frame must have exactly one column, but got "
+            f"{len(base_frame_columns)} columns: {[str(col) for col in base_frame_columns]}"
+        )
+
+        c, window = self.__column_expression_and_window_tuples[0]
+        col_sql_expr: Expression = c[1].to_sql_expression(frame_name_to_base_query_map, config)
+        window_expr = WindowExpression(
+            nested=col_sql_expr,
+            window=window.to_sql_node(frame_name_to_base_query_map['c'], config),
+        )
+
+        return window_expr
+
+
 
     @staticmethod
     def render_single_column_expression(c: PyLegendUnion[PyLegendTuple[str, PyLegendPrimitive]], suffix: str, config: FrameToPureConfig) -> str:

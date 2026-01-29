@@ -84,6 +84,7 @@ class AssignFunction(PandasApiAppliedFunction):
         for col, func in self.__col_definitions.items():
             res = func(tds_row)
             res_expr = res if isinstance(res, PyLegendPrimitive) else convert_literal_to_literal_expression(res)
+            print(f"type(res_expr) = {type(res_expr)}")
             new_col_expr = res_expr.to_sql_expression(
                 {"c": base_query},
                 config
