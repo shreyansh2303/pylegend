@@ -112,7 +112,7 @@ class RankFunction(PandasApiAppliedFunction):
                 window=window.to_sql_node(new_query, config),
             )
             new_select_items.append(
-                SingleColumn(alias=db_extension.quote_identifier(c[0]), expression=window_expr)
+                SingleColumn(alias=db_extension.quote_identifier(c[0] + temp_column_name_suffix), expression=window_expr)
             )
 
         new_query.select.selectItems = new_select_items
@@ -141,7 +141,6 @@ class RankFunction(PandasApiAppliedFunction):
             frame_name_to_base_query_map: PyLegendDict[str, QuerySpecification],
             config: FrameToSqlConfig
     ) -> Expression:
-        print('here here here')
         base_frame_columns = self.__base_frame.columns()
         assert len(base_frame_columns) == 1, (
             "To get an SQL expression, the base frame must have exactly one column, but got "
@@ -199,7 +198,7 @@ class RankFunction(PandasApiAppliedFunction):
 
         base_frame_columns = self.__base_frame.columns()
         assert len(base_frame_columns) == 1, (
-            "To get an SQL expression, the base frame must have exactly one column, but got "
+            "To get a pure expression, the base frame must have exactly one column, but got "
             f"{len(base_frame_columns)} columns: {[str(col) for col in base_frame_columns]}"
         )
 
