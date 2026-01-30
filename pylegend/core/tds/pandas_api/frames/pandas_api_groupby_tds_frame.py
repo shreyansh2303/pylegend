@@ -20,6 +20,7 @@ from pylegend._typing import (
     PyLegendDict,
     PyLegendSet,
     PyLegendSequence,
+    PyLegendTuple,
     TYPE_CHECKING,
 )
 from pylegend.core.language.pandas_api.pandas_api_aggregate_specification import PyLegendAggInput
