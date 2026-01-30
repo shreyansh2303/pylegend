@@ -11,9 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import uuid
-from abc import ABC, abstractmethod
 
+from abc import ABC, abstractmethod
 from pylegend._typing import (
     PyLegendList,
     PyLegendTuple,
@@ -26,22 +25,8 @@ class PureExpression(ABC):
         pass  # pragma: no cover
 
     @staticmethod
-    def from_raw_string(raw_string: str) -> "PureExpression":
-        return StringPureExpression(raw_string)
-
-    @staticmethod
     def from_prerequisite_expr(prerequisite_expr: str, column_name: str) -> "PureExpression":
         return PrerequisitePureExpression(prerequisite_expr, column_name)
-
-
-class StringPureExpression(PureExpression):
-    _pure_expr: str
-
-    def __init__(self, pure_expr: str):
-        self._pure_expr = pure_expr
-
-    def compile(self, tds_row_alias: str) -> PyLegendTuple[PyLegendList[str], str]:
-        return [], self._pure_expr
 
 
 class PrerequisitePureExpression(PureExpression):
@@ -52,9 +37,6 @@ class PrerequisitePureExpression(PureExpression):
         self._prerequisite_expr = prerequisite_expr
         self._column_name = column_name
 
-        new_column_name = str(uuid.uuid4())
-        self._change_column_name(new_column_name)
-
     @property
     def prerequisite_expr(self) -> str:
         return self._prerequisite_expr
@@ -62,10 +44,6 @@ class PrerequisitePureExpression(PureExpression):
     def compile(self, tds_row_alias: str) -> PyLegendTuple[PyLegendList["PrerequisitePureExpression"], str]:
         final_expr = f"${tds_row_alias}.{self._column_name}"
         return [self], final_expr
-
-    def _change_column_name(self, new_column_name: str) -> None:
-        self._prerequisite_expr = self._prerequisite_expr.replace(self._column_name, new_column_name)
-        self._column_name = new_column_name
 
 
 class CompositePureExpression(PureExpression):
