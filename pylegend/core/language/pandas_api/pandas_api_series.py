@@ -346,7 +346,12 @@ class Series(PyLegendColumnExpression, PyLegendPrimitive, BaseTdsFrame):
             ascending: bool = True,
             pct: bool = False
     ) -> "Series":
-        new_series = copy.copy(self)
+        if pct:
+            new_series = FloatSeries(self._filtered_frame, self.columns()[0].get_name())
+        else:
+            new_series = IntegerSeries(self._filtered_frame, self.columns()[0].get_name())
+        new_series.__base_frame = self.__base_frame
+
         applied_function_frame = self._filtered_frame.rank(
             axis, method, numeric_only, na_option, ascending, pct
         )

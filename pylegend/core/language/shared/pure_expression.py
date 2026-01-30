@@ -16,13 +16,13 @@ from abc import ABC, abstractmethod
 
 from pylegend._typing import (
     PyLegendList,
-    PyLegendTuple
+    PyLegendTuple,
 )
 
 
 class PureExpression(ABC):
     @abstractmethod
-    def compile(self, tds_row_alias: str) -> PyLegendTuple[PyLegendList[str], str]:
+    def compile(self, tds_row_alias: str) -> PyLegendTuple[PyLegendList["PrerequisitePureExpression"], str]:
         pass  # pragma: no cover
 
     @staticmethod
@@ -30,8 +30,8 @@ class PureExpression(ABC):
         return StringPureExpression(raw_string)
 
     @staticmethod
-    def from_prerequisite_expr(raw_string: str) -> "PureExpression":
-        return StringPureExpression(raw_string)
+    def from_prerequisite_expr(prerequisite_expr: str, column_name: str) -> "PureExpression":
+        return PrerequisitePureExpression(prerequisite_expr, column_name)
 
 
 class StringPureExpression(PureExpression):
@@ -55,30 +55,29 @@ class PrerequisitePureExpression(PureExpression):
         new_column_name = str(uuid.uuid4())
         self._change_column_name(new_column_name)
 
-    def compile(self, tds_row_alias: str) -> PyLegendTuple[PyLegendList[str], str]:
-        final_expr = f"${tds_row_alias}.{self._column_name}"
-        return [self._prerequisite_expr], final_expr
+    @property
+    def prerequisite_expr(self) -> str:
+        return self._prerequisite_expr
 
-    def _change_column_name(self, new_column_name) -> None:
+    def compile(self, tds_row_alias: str) -> PyLegendTuple[PyLegendList["PrerequisitePureExpression"], str]:
+        final_expr = f"${tds_row_alias}.{self._column_name}"
+        return [self], final_expr
+
+    def _change_column_name(self, new_column_name: str) -> None:
         self._prerequisite_expr = self._prerequisite_expr.replace(self._column_name, new_column_name)
         self._column_name = new_column_name
 
 
 class CompositePureExpression(PureExpression):
-    _left: PureExpression
-    _right: PureExpression
-    _operation: str
+    _prerequisites: PyLegendList[PrerequisitePureExpression]
+    _final_expr: str
 
-    def __init__(self, left: PureExpression, right: PureExpression, operation: str):
-        self._left = left
-        self._right = right
-        self._operation = operation
+    def __init__(self, final_expr: str):
+        self._prerequisites = []
+        self._final_expr = final_expr
 
-    def compile(self, tds_row_alias: str) -> PyLegendTuple[PyLegendList[str], str]:
-        prerequisites_left, expression_left = self._left.compile(tds_row_alias)
-        prerequisites_right, expression_right = self._right.compile(tds_row_alias)
+    def add_prerequisites(self, new_prerequisites: PyLegendList[PrerequisitePureExpression]) -> None:
+        self._prerequisites.extend(new_prerequisites)
 
-        combined_prerequisites = prerequisites_left + prerequisites_right
-        combined_expression = f"{expression_left} {self._operation} {expression_right}"
-
-        return combined_prerequisites, combined_expression
+    def compile(self, tds_row_alias: str) -> PyLegendTuple[PyLegendList[PrerequisitePureExpression], str]:
+        return self._prerequisites, self._final_expr

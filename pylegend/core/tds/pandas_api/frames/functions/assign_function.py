@@ -113,8 +113,10 @@ class AssignFunction(PandasApiAppliedFunction):
             if isinstance(pure_expr, str):
                 assigned_exprs[col] = pure_expr
             elif isinstance(pure_expr, PureExpression):
-                prerequisite_exprs.extend(pure_expr.get_all_prerequisite_exprs())
-                assigned_exprs[col] = pure_expr.get_project_expr(tds_row_alias='c')
+                prerequisites, expr = pure_expr.compile(tds_row_alias="c")
+                prerequisite_strs = [expr.prerequisite_expr for expr in prerequisites]
+                prerequisite_exprs.extend(prerequisite_strs)
+                assigned_exprs[col] = expr
 
         # build project clauses
         clauses: PyLegendList[str] = []

@@ -32,6 +32,7 @@ from pylegend.core.language.pandas_api.pandas_api_custom_expressions import (
     PandasApiWindowReference
 )
 from pylegend.core.language.shared.primitives.primitive import PyLegendPrimitive
+from pylegend.core.language.shared.pure_expression import PureExpression
 from pylegend.core.sql.metamodel import (
     Expression,
     QuerySpecification,
@@ -140,6 +141,7 @@ class RankFunction(PandasApiAppliedFunction):
             frame_name_to_base_query_map: PyLegendDict[str, QuerySpecification],
             config: FrameToSqlConfig
     ) -> Expression:
+        print('here here here')
         base_frame_columns = self.__base_frame.columns()
         assert len(base_frame_columns) == 1, (
             "To get an SQL expression, the base frame must have exactly one column, but got "
@@ -154,7 +156,6 @@ class RankFunction(PandasApiAppliedFunction):
         )
 
         return window_expr
-
 
 
     @staticmethod
@@ -192,6 +193,26 @@ class RankFunction(PandasApiAppliedFunction):
                 f"{extend_str}{config.separator(1)}"
                 f"{project_str}"
         )
+
+    def to_pure_expression(self, config: FrameToPureConfig) -> PyLegendUnion[str, PureExpression]:
+        temp_column_name_suffix: str = "__internal_pylegend_column__"
+
+        base_frame_columns = self.__base_frame.columns()
+        assert len(base_frame_columns) == 1, (
+            "To get an SQL expression, the base frame must have exactly one column, but got "
+            f"{len(base_frame_columns)} columns: {[str(col) for col in base_frame_columns]}"
+        )
+
+        c, window = self.__column_expression_and_window_tuples[0]
+        window_expression: str = window.to_pure_expression(config)
+        extend_str = \
+            f"->extend({window_expression}, ~{self.render_single_column_expression(c, temp_column_name_suffix, config)})"
+
+        pure_expr = PureExpression.from_prerequisite_expr(
+            extend_str, column_name=escape_column_name(c[0] + temp_column_name_suffix)
+        )
+        return pure_expr
+
 
     def base_frame(self) -> PandasApiBaseTdsFrame:
         from pylegend.core.tds.pandas_api.frames.pandas_api_groupby_tds_frame import PandasApiGroupbyTdsFrame
