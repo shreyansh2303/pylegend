@@ -21,6 +21,7 @@ from pylegend._typing import (
     PyLegendUnion,
     PyLegendList,
     PyLegendMapping,
+    PyLegendDict,
 )
 from pylegend.core.language.pandas_api.pandas_api_aggregate_specification import (
     PyLegendAggFunc,
@@ -40,10 +41,11 @@ from pylegend.core.language.shared.primitives.number import PyLegendNumber
 from pylegend.core.language.shared.primitives.primitive import PyLegendPrimitive, PyLegendPrimitiveOrPythonPrimitive
 from pylegend.core.language.shared.primitives.strictdate import PyLegendStrictDate
 from pylegend.core.language.shared.primitives.string import PyLegendString
+from pylegend.core.language.shared.pure_expression import PureExpression, PrerequisitePureExpression
 from pylegend.core.sql.metamodel import (
     QuerySpecification,
     SelectItem,
-    SingleColumn,
+    SingleColumn, Expression,
 )
 from pylegend.core.tds.pandas_api.frames.pandas_api_applied_function_tds_frame import PandasApiAppliedFunction
 from pylegend.core.tds.pandas_api.frames.pandas_api_base_tds_frame import PandasApiBaseTdsFrame
@@ -77,6 +79,40 @@ class AggregateFunction(PandasApiAppliedFunction):
         self.__axis = axis
         self.__args = args
         self.__kwargs = kwargs
+
+    def to_sql_expression(
+            self,
+            frame_name_to_base_query_map: PyLegendDict[str, QuerySpecification],
+            config: FrameToSqlConfig
+    ) -> Expression:
+        columns = self.__base_frame.columns()
+        assert len(columns) == 1, (
+            f"Base frame should contain exactly one column to calculate SQL expression,"
+            f" but got {len(columns)} columns: {[str(col) for col in columns]}"
+        )
+
+        agg = self.__aggregates_list[0]
+        return agg[2].to_sql_expression(frame_name_to_base_query_map, config)
+
+    def to_pure_expression(self, config: FrameToPureConfig) -> PrerequisitePureExpression:
+        columns = self.__base_frame.columns()
+        assert len(columns) == 1, (
+            "Base frame should contain exactly one column to calculate pure expression,"
+            f" but got {len(columns)} columns: {[str(col) for col in columns]}"
+        )
+
+        agg = self.__aggregates_list[0]
+        map_expr_string = (
+            agg[1].to_pure_expression(config) if isinstance(agg[1], PyLegendPrimitive)
+            else convert_literal_to_literal_expression(agg[1]).to_pure_expression(config)
+        )
+        agg_expr_string = agg[2].to_pure_expression(config).replace(map_expr_string, "$c")
+        pure_expr = (
+            f"__INTERNAL_PYLEGEND_COLUMN__:{generate_pure_lambda('r', map_expr_string)}:"
+            f"{generate_pure_lambda('c', agg_expr_string)}"
+        )
+
+        return PrerequisitePureExpression(pure_expr, column_alias="__INTERNAL_PYLEGEND_COLUMN__")
 
     def to_sql(self, config: FrameToSqlConfig) -> QuerySpecification:
         db_extension = config.sql_to_string_generator().get_db_extension()

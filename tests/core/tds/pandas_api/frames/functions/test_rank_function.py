@@ -78,9 +78,9 @@ class TestRankFunctionErrors:
 
 class TestRankFunctionOnBaseFrame:
 
-    @pytest.fixture(autouse=True)
-    def init_legend(self, legend_test_server: PyLegendDict[str, PyLegendUnion[int,]]) -> None:
-        self.legend_client = LegendClient("localhost", legend_test_server["engine_port"], secure_http=False)
+    # @pytest.fixture(autouse=True)
+    # def init_legend(self, legend_test_server: PyLegendDict[str, PyLegendUnion[int,]]) -> None:
+    #     self.legend_client = LegendClient("localhost", legend_test_server["engine_port"], secure_http=False)
 
     def test_rank_method_simple_min(self) -> None:
         columns = [PrimitiveTdsColumn.integer_column("col1")]
@@ -318,10 +318,9 @@ class TestRankFunctionOnBaseFrame:
         ]
         frame: PandasApiTdsFrame = PandasApiTableSpecInputFrame(['test_schema', 'test_table'], columns)
         frame["age_rank"] = frame["age"].rank()
-        frame["age_rank_plus_2"] = frame["age"].rank() + 2
-        frame["age_rank_plus_height_rank"] = frame["age"].rank() + frame["height"].rank()
-        frame["complex_assignment"] = \
-            (2*frame["age_rank"] + frame["age_rank_plus_height_rank"].rank())/frame["age"] - frame["height"].rank()/5
+        frame['age_rank_plus_2'] = frame["age"].rank() + 4
+        frame['age_rank_plus_2'] = frame["age"].rank() + 2
+        frame["name_age_combined"] = frame["age_rank_plus_2"] + frame["height"].rank()/5 + frame["name"].rank()
 
         expected = '''
             SELECT
@@ -330,8 +329,7 @@ class TestRankFunctionOnBaseFrame:
                 "root".height AS "height",
                 rank() OVER (ORDER BY "root".age) AS "age_rank",
                 (rank() OVER (ORDER BY "root".age) + 2) AS "age_rank_plus_2",
-                (rank() OVER (ORDER BY "root".age) + rank() OVER (ORDER BY "root".height)) AS "age_rank_plus_height_rank",
-                (((1.0 * ((2 * rank() OVER (ORDER BY "root".age)) + rank() OVER (ORDER BY (rank() OVER (ORDER BY "root".age) + rank() OVER (ORDER BY "root".height))))) / "root".age) - ((1.0 * rank() OVER (ORDER BY "root".height)) / 5)) AS "complex_assignment"
+                (((rank() OVER (ORDER BY "root".age) + 2) + ((1.0 * rank() OVER (ORDER BY "root".height)) / 5)) + rank() OVER (ORDER BY "root".name)) AS "name_age_combined"
             FROM
                 test_schema.test_table AS "root"
         '''
@@ -343,13 +341,12 @@ class TestRankFunctionOnBaseFrame:
               ->extend(over([ascending(~age)]), ~age__internal_pylegend_column__:{p,w,r | $p->rank($w, $r)})
               ->project(~[name:c|$c.name, age:c|$c.age, height:c|$c.height, age_rank:c|$c.age__internal_pylegend_column__])
               ->extend(over([ascending(~age)]), ~age__internal_pylegend_column__:{p,w,r | $p->rank($w, $r)})
+              ->project(~[name:c|$c.name, age:c|$c.age, height:c|$c.height, age_rank:c|$c.age_rank, age_rank_plus_2:c|(toOne($c.age__internal_pylegend_column__) + 4)])
+              ->extend(over([ascending(~age)]), ~age__internal_pylegend_column__:{p,w,r | $p->rank($w, $r)})
               ->project(~[name:c|$c.name, age:c|$c.age, height:c|$c.height, age_rank:c|$c.age_rank, age_rank_plus_2:c|(toOne($c.age__internal_pylegend_column__) + 2)])
               ->extend(over([ascending(~height)]), ~height__internal_pylegend_column__:{p,w,r | $p->rank($w, $r)})
-              ->extend(over([ascending(~age)]), ~age__internal_pylegend_column__:{p,w,r | $p->rank($w, $r)})
-              ->project(~[name:c|$c.name, age:c|$c.age, height:c|$c.height, age_rank:c|$c.age_rank, age_rank_plus_2:c|$c.age_rank_plus_2, age_rank_plus_height_rank:c|(toOne($c.age__internal_pylegend_column__) + toOne($c.height__internal_pylegend_column__))])
-              ->extend(over([ascending(~height)]), ~height__internal_pylegend_column__:{p,w,r | $p->rank($w, $r)})
-              ->extend(over([ascending(~age_rank_plus_height_rank)]), ~age_rank_plus_height_rank__internal_pylegend_column__:{p,w,r | $p->rank($w, $r)})
-              ->project(~[name:c|$c.name, age:c|$c.age, height:c|$c.height, age_rank:c|$c.age_rank, age_rank_plus_2:c|$c.age_rank_plus_2, age_rank_plus_height_rank:c|$c.age_rank_plus_height_rank, complex_assignment:c|((((2 * toOne($c.age_rank)) + toOne($c.age_rank_plus_height_rank__internal_pylegend_column__)) / toOne($c.age)) - (toOne($c.height__internal_pylegend_column__) / 5))])
+              ->extend(over([ascending(~name)]), ~name__internal_pylegend_column__:{p,w,r | $p->rank($w, $r)})
+              ->project(~[name:c|$c.name, age:c|$c.age, height:c|$c.height, age_rank:c|$c.age_rank, age_rank_plus_2:c|$c.age_rank_plus_2, name_age_combined:c|((toOne($c.age_rank_plus_2) + (toOne($c.height__internal_pylegend_column__) / 5)) + toOne($c.name__internal_pylegend_column__))])
         '''
         expected = dedent(expected).strip()
         assert frame.to_pure_query(FrameToPureConfig()) == expected

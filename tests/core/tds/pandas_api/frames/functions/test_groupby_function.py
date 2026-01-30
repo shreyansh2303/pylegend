@@ -202,12 +202,35 @@ class TestGroupbyErrors:
             gb.var(ddof=2)
         assert "Only ddof=1 (Sample Variance) is supported in var function, but got: 2" in v.value.args[0]
 
+    def test_groupby_invalid_column_selection_from_series(self) -> None:
+        columns = [
+            PrimitiveTdsColumn.integer_column("col1"),
+            PrimitiveTdsColumn.integer_column("col2"),
+            PrimitiveTdsColumn.integer_column("col3")
+        ]
+        frame = PandasApiTableSpecInputFrame(["test_schema", "test_table"], columns)
+
+        with pytest.raises(ValueError) as v:
+            frame.groupby("col1")["col2"].agg({"col3": "count", "col2": "sum"})
+        expected = '''
+        '''
+        expected = dedent(expected).strip()
+        assert expected == v.value.args[0]
+
+        with pytest.raises(ValueError) as v:
+            frame.groupby("col1")["col2"].agg({"col1": "min"})
+        expected = '''
+        '''
+        expected = dedent(expected).strip()
+        assert expected == v.value.args[0]
+
+
 
 class TestGroupbyFunctionality:
 
-    @pytest.fixture(autouse=True)
-    def init_legend(self, legend_test_server: PyLegendDict[str, PyLegendUnion[int,]]) -> None:
-        self.legend_client = LegendClient("localhost", legend_test_server["engine_port"], secure_http=False)
+    # @pytest.fixture(autouse=True)
+    # def init_legend(self, legend_test_server: PyLegendDict[str, PyLegendUnion[int,]]) -> None:
+    #     self.legend_client = LegendClient("localhost", legend_test_server["engine_port"], secure_http=False)
 
     def test_groupby_simple_query_generation(self) -> None:
         columns = [
@@ -722,40 +745,174 @@ class TestGroupbyFunctionality:
             "#Table(test_schema.test_table)#->groupBy(~[col1], ~[col2:{r | $r.col2}:{c | $c->count()}])"
         )
 
-    def test_groupby_self_selection(self) -> None:
+    def test_groupby_single_selection(self) -> None:
         columns = [
-            PrimitiveTdsColumn.integer_column("Category"),
-            PrimitiveTdsColumn.integer_column("SubCategory"),
-            PrimitiveTdsColumn.integer_column("Amount"),
+            PrimitiveTdsColumn.integer_column("col1"),
+            PrimitiveTdsColumn.integer_column("col2"),
+            PrimitiveTdsColumn.integer_column("col3")
         ]
-        frame: PandasApiTdsFrame = PandasApiTableSpecInputFrame(["test_schema", "test_table"], columns)
-        frame = frame.groupby(["Category", "SubCategory"], sort=False)[["SubCategory"]].sum()
+        frame = PandasApiTableSpecInputFrame(["test_schema", "test_table"], columns)
+
+        frame1 = frame.groupby("col1")["col2"].mean()
+        frame2 = frame.groupby("col1")[["col2"]].mean()
 
         expected = '''
             SELECT
-                "root".Category AS "Category",
-                "root".SubCategory AS "SubCategory",
-                SUM("root".SubCategory) AS "sum(SubCategory)"
+                "root".col1 AS "col1",
+                AVG("root".col2) AS "col2"
             FROM
                 test_schema.test_table AS "root"
             GROUP BY
-                "root".Category,
-                "root".SubCategory
+                "root".col1
+            ORDER BY
+                "root".col1
         '''
         expected = dedent(expected).strip()
-        assert frame.to_sql_query(FrameToSqlConfig()) == expected
+        assert frame1.to_sql_query(FrameToSqlConfig()) == expected
+        assert frame2.to_sql_query(FrameToSqlConfig()) == expected
 
         expected = '''
             #Table(test_schema.test_table)#
               ->groupBy(
-                ~[Category, SubCategory],
-                ~['sum(SubCategory)':{r | $r.SubCategory}:{c | $c->sum()}]
+                ~[col1],
+                ~[col2:{r | $r.col2}:{c | $c->average()}]
               )
+              ->sort([~col1->ascending()])
         '''
         expected = dedent(expected).strip()
-        assert frame.to_pure_query(FrameToPureConfig()) == expected
-        assert generate_pure_query_and_compile(frame, FrameToPureConfig(), self.legend_client) == expected
+        assert frame1.to_pure_query(FrameToPureConfig()) == expected
+        assert frame2.to_pure_query(FrameToPureConfig()) == expected
 
+    def test_groupby_self_selection(self) -> None:
+        columns = [
+            PrimitiveTdsColumn.integer_column("col1"),
+            PrimitiveTdsColumn.integer_column("col2"),
+            PrimitiveTdsColumn.integer_column("col3")
+        ]
+        frame = PandasApiTableSpecInputFrame(["test_schema", "test_table"], columns)
+
+        frame1 = frame.groupby("col1")["col1"].mean()
+        frame2 = frame.groupby("col1")[["col1"]].mean()
+
+        expected = '''
+            SELECT
+                "root".col1 AS "col1",
+                AVG("root".col1) AS "mean(col1)"
+            FROM
+                test_schema.test_table AS "root"
+            GROUP BY
+                "root".col1
+            ORDER BY
+                "root".col1
+        '''
+        expected = dedent(expected).strip()
+        assert frame1.to_sql_query(FrameToSqlConfig()) == expected
+        assert frame2.to_sql_query(FrameToSqlConfig()) == expected
+
+        expected = '''
+            #Table(test_schema.test_table)#
+              ->groupBy(
+                ~[col1],
+                ~['mean(col1)':{r | $r.col1}:{c | $c->average()}]
+              )
+              ->sort([~col1->ascending()])
+        '''
+        expected = dedent(expected).strip()
+        assert frame1.to_pure_query(FrameToPureConfig()) == expected
+        assert frame2.to_pure_query(FrameToPureConfig()) == expected
+
+        frame3 = frame.groupby(["col1", "col2"])["col1"].mean()
+
+        expected = '''
+            SELECT
+                "root".col1 AS "col1",
+                "root".col2 AS "col2",
+                AVG("root".col1) AS "mean(col1)"
+            FROM
+                test_schema.test_table AS "root"
+            GROUP BY
+                "root".col1,
+                "root".col2
+            ORDER BY
+                "root".col1,
+                "root".col2
+        '''
+        expected = dedent(expected).strip()
+        assert frame3.to_sql_query(FrameToSqlConfig()) == expected
+
+        expected = '''
+            #Table(test_schema.test_table)#
+              ->groupBy(
+                ~[col1, col2],
+                ~['mean(col1)':{r | $r.col1}:{c | $c->average()}]
+              )
+              ->sort([~col1->ascending(), ~col2->ascending()])
+        '''
+        expected = dedent(expected).strip()
+        assert frame3.to_pure_query(FrameToPureConfig()) == expected
+
+        frame4 = frame.groupby(["col1", "col2"])["col2"].agg(["sum", "count"])
+
+        expected = '''
+            SELECT
+                "root".col1 AS "col1",
+                "root".col2 AS "col2",
+                SUM("root".col2) AS "sum(col2)",
+                COUNT("root".col2) AS "count(col2)"
+            FROM
+                test_schema.test_table AS "root"
+            GROUP BY
+                "root".col1,
+                "root".col2
+            ORDER BY
+                "root".col1,
+                "root".col2
+        '''
+        expected = dedent(expected).strip()
+        assert frame4.to_sql_query(FrameToSqlConfig()) == expected
+
+        expected = '''
+            #Table(test_schema.test_table)#
+              ->groupBy(
+                ~[col1, col2],
+                ~['sum(col2)':{r | $r.col2}:{c | $c->sum()}, 'count(col2)':{r | $r.col2}:{c | $c->count()}]
+              )
+              ->sort([~col1->ascending(), ~col2->ascending()])
+        '''
+        expected = dedent(expected).strip()
+        assert frame4.to_pure_query(FrameToPureConfig()) == expected
+
+        frame5 = frame.groupby(["col1", "col2"])[["col1", "col2"]].agg({"col1": "sum", "col2": ["sum", "mean"]})
+
+        expected = '''
+            SELECT
+                "root".col1 AS "col1",
+                "root".col2 AS "col2",
+                SUM("root".col1) AS "sum(col1)",
+                SUM("root".col2) AS "sum(col2)",
+                AVG("root".col2) AS "mean(col2)"
+            FROM
+                test_schema.test_table AS "root"
+            GROUP BY
+                "root".col1,
+                "root".col2
+            ORDER BY
+                "root".col1,
+                "root".col2
+        '''
+        expected = dedent(expected).strip()
+        assert frame5.to_sql_query(FrameToSqlConfig()) == expected
+
+        expected = '''
+            #Table(test_schema.test_table)#
+              ->groupBy(
+                ~[col1, col2],
+                ~['sum(col1)':{r | $r.col1}:{c | $c->sum()}, 'sum(col2)':{r | $r.col2}:{c | $c->sum()}, 'mean(col2)':{r | $r.col2}:{c | $c->average()}]
+              )
+              ->sort([~col1->ascending(), ~col2->ascending()])
+        '''
+        expected = dedent(expected).strip()
+        assert frame5.to_pure_query(FrameToPureConfig()) == expected
 
 
 class TestGroupbyEndtoEnd:

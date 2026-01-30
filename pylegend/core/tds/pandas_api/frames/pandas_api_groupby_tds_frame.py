@@ -146,7 +146,8 @@ class PandasApiGroupbyTdsFrame:
                 f"Current frame columns: {sorted(available_columns)}"
             )
 
-    def __getitem__(self, item: PyLegendUnion[str, PyLegendList[str]]) -> PyLegendUnion["PandasApiGroupbyTdsFrame", "Series"]:
+    def __getitem__(self, item: PyLegendUnion[str, PyLegendList[str]]) -> PyLegendUnion["PandasApiGroupbyTdsFrame", "GroupbySeries"]:
+        from pylegend.core.language.pandas_api.pandas_api_groupby_series import GroupbySeries
         columns_to_select: PyLegendSet[str]
 
         if isinstance(item, str):
@@ -190,29 +191,29 @@ class PandasApiGroupbyTdsFrame:
             column: TdsColumn = selected_columns[0]
             col_type = column.get_type()
             if col_type == "Boolean":
-                from pylegend.core.language.pandas_api.pandas_api_series import BooleanSeries  # pragma: no cover
-                return BooleanSeries(new_frame, column.get_name())  # pragma: no cover (Boolean column not supported in PURE)
+                from pylegend.core.language.pandas_api.pandas_api_groupby_series import BooleanGroupbySeries  # pragma: no cover
+                return BooleanGroupbySeries(new_frame)  # pragma: no cover (Boolean column not supported in PURE)
             elif col_type == "String":
-                from pylegend.core.language.pandas_api.pandas_api_series import StringSeries
-                return StringSeries(new_frame, column.get_name())
+                from pylegend.core.language.pandas_api.pandas_api_groupby_series import StringGroupbySeries
+                return StringGroupbySeries(new_frame)
             elif col_type == "Number":
-                from pylegend.core.language.pandas_api.pandas_api_series import NumberSeries
-                return NumberSeries(new_frame, column.get_name())
+                from pylegend.core.language.pandas_api.pandas_api_groupby_series import NumberGroupbySeries
+                return NumberGroupbySeries(new_frame)
             elif col_type == "Integer":
-                from pylegend.core.language.pandas_api.pandas_api_series import IntegerSeries
-                return IntegerSeries(new_frame, column.get_name())
+                from pylegend.core.language.pandas_api.pandas_api_groupby_series import IntegerGroupbySeries
+                return IntegerGroupbySeries(new_frame)
             elif col_type == "Float":
-                from pylegend.core.language.pandas_api.pandas_api_series import FloatSeries
-                return FloatSeries(new_frame, column.get_name())
+                from pylegend.core.language.pandas_api.pandas_api_groupby_series import FloatGroupbySeries
+                return FloatGroupbySeries(new_frame)
             elif col_type == "Date":
-                from pylegend.core.language.pandas_api.pandas_api_series import DateSeries
-                return DateSeries(new_frame, column.get_name())
+                from pylegend.core.language.pandas_api.pandas_api_groupby_series import DateGroupbySeries
+                return DateGroupbySeries(new_frame)
             elif col_type == "DateTime":
-                from pylegend.core.language.pandas_api.pandas_api_series import DateTimeSeries
-                return DateTimeSeries(new_frame, column.get_name())
+                from pylegend.core.language.pandas_api.pandas_api_groupby_series import DateTimeGroupbySeries
+                return DateTimeGroupbySeries(new_frame)
             elif col_type == "StrictDate":
-                from pylegend.core.language.pandas_api.pandas_api_series import StrictDateSeries
-                return StrictDateSeries(new_frame, column.get_name())
+                from pylegend.core.language.pandas_api.pandas_api_groupby_series import StrictDateGroupbySeries
+                return StrictDateGroupbySeries(new_frame)
             else:
                 raise ValueError(f"Unsupported column type '{col_type}' for column '{column.get_name()}'")  # pragma: no cover
 
