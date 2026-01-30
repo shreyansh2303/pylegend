@@ -331,6 +331,7 @@ class Series(PyLegendColumnExpression, PyLegendPrimitive, BaseTdsFrame):
             ascending: bool = True,
             pct: bool = False
     ) -> "Series":
+        new_series: Series
         if pct:
             new_series = FloatSeries(self._filtered_frame, self.columns()[0].get_name())
         else:

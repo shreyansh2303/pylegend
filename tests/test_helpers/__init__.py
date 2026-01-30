@@ -27,6 +27,9 @@ def generate_pure_query_and_compile(
         config: FrameToPureConfig,
         legend_client: LegendClient
 ) -> str:
+    def quote_if_necessary(col: str) -> str:
+        return col if col.isidentifier() else f'"{col}"'
+
     assert isinstance(frame, BaseTdsFrame)
     tds_frames = frame.get_all_tds_frames()
     input_frames = [x for x in tds_frames if isinstance(x, InputTdsFrame)]
@@ -38,7 +41,7 @@ def generate_pure_query_and_compile(
     input_text_replacement_map = {}
     db_code = ""
     for i, x in enumerate(input_frames):
-        columns_text = ", ".join([f"{c.get_name()} {__to_relation_type(c)}" for c in x.columns()])
+        columns_text = ", ".join([f"{quote_if_necessary(c.get_name())} {__to_relation_type(c)}" for c in x.columns()])
         db_code += f"\nTable test_table_{str(i + 1)} ({columns_text})\n"
         input_text_replacement_map[x.to_pure_query(config)] = "#>{test::DB.test_table_" + str(i + 1) + "}#"
     db_code = f"###Relational\nDatabase test::DB({db_code})\n\n"

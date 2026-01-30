@@ -78,9 +78,9 @@ class TestRankFunctionErrors:
 
 class TestRankFunctionOnBaseFrame:
 
-    # @pytest.fixture(autouse=True)
-    # def init_legend(self, legend_test_server: PyLegendDict[str, PyLegendUnion[int,]]) -> None:
-    #     self.legend_client = LegendClient("localhost", legend_test_server["engine_port"], secure_http=False)
+    @pytest.fixture(autouse=True)
+    def init_legend(self, legend_test_server: PyLegendDict[str, PyLegendUnion[int,]]) -> None:
+        self.legend_client = LegendClient("localhost", legend_test_server["engine_port"], secure_http=False)
 
     def test_rank_method_simple_min(self) -> None:
         columns = [PrimitiveTdsColumn.integer_column("col1")]
@@ -93,7 +93,7 @@ class TestRankFunctionOnBaseFrame:
             FROM
                 (
                     SELECT
-                        rank() OVER (ORDER BY "root"."col1") AS "col1"
+                        rank() OVER (ORDER BY "root"."col1") AS "col1__internal_pylegend_column__"
                     FROM
                         (
                             SELECT
@@ -132,8 +132,8 @@ class TestRankFunctionOnBaseFrame:
             FROM
                 (
                     SELECT
-                        rank() OVER (ORDER BY "root"."col1") AS "col1",
-                        rank() OVER (ORDER BY "root"."col2") AS "col2"
+                        rank() OVER (ORDER BY "root"."col1") AS "col1__internal_pylegend_column__",
+                        rank() OVER (ORDER BY "root"."col2") AS "col2__internal_pylegend_column__"
                     FROM
                         (
                             SELECT
@@ -171,7 +171,7 @@ class TestRankFunctionOnBaseFrame:
             FROM
                 (
                     SELECT
-                        dense_rank() OVER (ORDER BY "root"."col1" DESC) AS "col1"
+                        dense_rank() OVER (ORDER BY "root"."col1" DESC) AS "col1__internal_pylegend_column__"
                     FROM
                         (
                             SELECT
@@ -206,7 +206,7 @@ class TestRankFunctionOnBaseFrame:
             FROM
                 (
                     SELECT
-                        row_number() OVER (ORDER BY "root"."col1") AS "col1"
+                        row_number() OVER (ORDER BY "root"."col1") AS "col1__internal_pylegend_column__"
                     FROM
                         (
                             SELECT
@@ -241,7 +241,7 @@ class TestRankFunctionOnBaseFrame:
             FROM
                 (
                     SELECT
-                        percent_rank() OVER (ORDER BY "root"."col1") AS "col1"
+                        percent_rank() OVER (ORDER BY "root"."col1") AS "col1__internal_pylegend_column__"
                     FROM
                         (
                             SELECT
@@ -280,8 +280,8 @@ class TestRankFunctionOnBaseFrame:
             FROM
                 (
                     SELECT
-                        rank() OVER (ORDER BY "root"."int_col") AS "int_col",
-                        rank() OVER (ORDER BY "root"."float_col") AS "float_col"
+                        rank() OVER (ORDER BY "root"."int_col") AS "int_col__internal_pylegend_column__",
+                        rank() OVER (ORDER BY "root"."float_col") AS "float_col__internal_pylegend_column__"
                     FROM
                         (
                             SELECT
@@ -350,7 +350,7 @@ class TestRankFunctionOnBaseFrame:
         '''
         expected = dedent(expected).strip()
         assert frame.to_pure_query(FrameToPureConfig()) == expected
-        # assert generate_pure_query_and_compile(frame, FrameToPureConfig(), self.legend_client) == expected
+        assert generate_pure_query_and_compile(frame, FrameToPureConfig(), self.legend_client) == expected
 
     def test_spaces(self) -> None:
         columns = [
@@ -359,19 +359,16 @@ class TestRankFunctionOnBaseFrame:
             PrimitiveTdsColumn.float_column("present height"),
         ]
         frame: PandasApiTdsFrame = PandasApiTableSpecInputFrame(['test_schema', 'test_table'], columns)
-        frame["ranked_height"] = frame["present height"].rank()
-        frame["ranked present age"] = frame["present age"].rank()
+        frame["ranked height"] = frame["present height"].rank()
 
         expected = '''
             #Table(test_schema.test_table)#
               ->extend(over([ascending(~'present height')]), ~'present height__internal_pylegend_column__':{p,w,r | $p->rank($w, $r)})
-              ->project(~[name:c|$c.name, 'present age':c|$c.'present age', 'present height':c|$c.'present height', ranked_height:c|$c.'present height__internal_pylegend_column__'])
-              ->extend(over([ascending(~'present age')]), ~'present age__internal_pylegend_column__':{p,w,r | $p->rank($w, $r)})
-              ->project(~[name:c|$c.name, 'present age':c|$c.'present age', 'present height':c|$c.'present height', ranked_height:c|$c.ranked_height, 'ranked present age':c|$c.'present age__internal_pylegend_column__'])
+              ->project(~[name:c|$c.name, 'present age':c|$c.'present age', 'present height':c|$c.'present height', 'ranked height':c|$c.'present height__internal_pylegend_column__'])
         '''
         expected = dedent(expected).strip()
         assert frame.to_pure_query(FrameToPureConfig()) == expected
-        # assert generate_pure_query_and_compile(frame, FrameToPureConfig(), self.legend_client) == expected
+        assert generate_pure_query_and_compile(frame, FrameToPureConfig(), self.legend_client) == expected
 
 
 class TestRankFunctionOnGroupbyFrame:
@@ -396,8 +393,8 @@ class TestRankFunctionOnGroupbyFrame:
             FROM
                 (
                     SELECT
-                        rank() OVER (PARTITION BY "root"."group_col" ORDER BY "root"."val_col") AS "val_col",
-                        rank() OVER (PARTITION BY "root"."group_col" ORDER BY "root"."random_col") AS "random_col"
+                        rank() OVER (PARTITION BY "root"."group_col" ORDER BY "root"."val_col") AS "val_col__internal_pylegend_column__",
+                        rank() OVER (PARTITION BY "root"."group_col" ORDER BY "root"."random_col") AS "random_col__internal_pylegend_column__"
                     FROM
                         (
                             SELECT
@@ -440,7 +437,7 @@ class TestRankFunctionOnGroupbyFrame:
             FROM
                 (
                     SELECT
-                        rank() OVER (PARTITION BY "root"."group_col" ORDER BY "root"."val_col") AS "val_col"
+                        rank() OVER (PARTITION BY "root"."group_col" ORDER BY "root"."val_col") AS "val_col__internal_pylegend_column__"
                     FROM
                         (
                             SELECT
@@ -482,8 +479,8 @@ class TestRankFunctionOnGroupbyFrame:
             FROM
                 (
                     SELECT
-                        percent_rank() OVER (PARTITION BY "root"."group_col" ORDER BY "root"."val_col") AS "val_col",
-                        percent_rank() OVER (PARTITION BY "root"."group_col" ORDER BY "root"."random_col") AS "random_col"
+                        percent_rank() OVER (PARTITION BY "root"."group_col" ORDER BY "root"."val_col") AS "val_col__internal_pylegend_column__",
+                        percent_rank() OVER (PARTITION BY "root"."group_col" ORDER BY "root"."random_col") AS "random_col__internal_pylegend_column__"
                     FROM
                         (
                             SELECT
@@ -527,8 +524,8 @@ class TestRankFunctionOnGroupbyFrame:
             FROM
                 (
                     SELECT
-                        dense_rank() OVER (PARTITION BY "root"."group_col" ORDER BY "root"."val_col") AS "val_col",
-                        dense_rank() OVER (PARTITION BY "root"."group_col" ORDER BY "root"."random_col") AS "random_col"
+                        dense_rank() OVER (PARTITION BY "root"."group_col" ORDER BY "root"."val_col") AS "val_col__internal_pylegend_column__",
+                        dense_rank() OVER (PARTITION BY "root"."group_col" ORDER BY "root"."random_col") AS "random_col__internal_pylegend_column__"
                     FROM
                         (
                             SELECT
@@ -572,8 +569,8 @@ class TestRankFunctionOnGroupbyFrame:
             FROM
                 (
                     SELECT
-                        row_number() OVER (PARTITION BY "root"."group_col" ORDER BY "root"."val_col") AS "val_col",
-                        row_number() OVER (PARTITION BY "root"."group_col" ORDER BY "root"."random_col") AS "random_col"
+                        row_number() OVER (PARTITION BY "root"."group_col" ORDER BY "root"."val_col") AS "val_col__internal_pylegend_column__",
+                        row_number() OVER (PARTITION BY "root"."group_col" ORDER BY "root"."random_col") AS "random_col__internal_pylegend_column__"
                     FROM
                         (
                             SELECT
@@ -617,8 +614,8 @@ class TestRankFunctionOnGroupbyFrame:
             FROM
                 (
                     SELECT
-                        percent_rank() OVER (PARTITION BY "root"."group_col" ORDER BY "root"."val_col" DESC) AS "val_col",
-                        percent_rank() OVER (PARTITION BY "root"."group_col" ORDER BY "root"."random_col" DESC) AS "random_col"
+                        percent_rank() OVER (PARTITION BY "root"."group_col" ORDER BY "root"."val_col" DESC) AS "val_col__internal_pylegend_column__",
+                        percent_rank() OVER (PARTITION BY "root"."group_col" ORDER BY "root"."random_col" DESC) AS "random_col__internal_pylegend_column__"
                     FROM
                         (
                             SELECT
@@ -730,7 +727,8 @@ class TestRankFunctionEndtoEnd:
         frame["Firm/Legal Name Rank"] = frame["Firm/Legal Name"].rank(pct=True, ascending=False, na_option='bottom')
 
         expected = {
-            "columns": ["First Name", "Last Name", "Age", "Firm/Legal Name"],
+            "columns": ["First Name", "Last Name", "Age", "Firm/Legal Name",
+                        "First Name Rank", "Last Name Rank", "Age Rank", "Firm/Legal Name Rank"],
             "rows": [
                 # Peter (0.0), Smith (0.0), 23 (3/6=0.5), Firm X (0.0)
                 {"values": ['Peter', 'Smith', 23, 'Firm X', 0.0, 0.0, 0.5, 0.0]},
@@ -760,8 +758,8 @@ class TestRankFunctionEndtoEnd:
         frame = frame[["Firm/Legal Name", "First Name", "First Name Rank", "Last Name", "Last Name Rank", "Age", "Age Rank"]]
 
         expected = {
-            "columns": ["First Name", "Last Name", "Age"],
-            "rows": [
+            'columns': ['Firm/Legal Name', 'First Name', 'First Name Rank', 'Last Name', 'Last Name Rank', 'Age', 'Age Rank'],
+            'rows': [
                 {'values': ['Firm X', 'Peter', 4, 'Smith', 4, 23, 4]},
                 {'values': ['Firm X', 'John', 2, 'Johnson', 3, 22, 2]},
                 {'values': ['Firm X', 'John', 2, 'Hill', 2, 12, 1]},
@@ -769,7 +767,7 @@ class TestRankFunctionEndtoEnd:
                 {'values': ['Firm A', 'Fabrice', 1, 'Roberts', 1, 34, 1]},
                 {'values': ['Firm B', 'Oliver', 1, 'Hill', 1, 32, 1]},
                 {'values': ['Firm C', 'David', 1, 'Harris', 1, 35, 1]}
-            ],
+            ]
         }
         res = frame.execute_frame_to_string()
         assert json.loads(res)["result"] == expected

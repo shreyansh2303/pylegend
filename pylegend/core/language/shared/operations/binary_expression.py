@@ -86,7 +86,7 @@ class PyLegendBinaryExpression(PyLegendExpression, metaclass=ABCMeta):
             config
         )
 
-    def to_pure_expression(self, config: FrameToPureConfig) -> PyLegendUnion[str, PureExpression]:
+    def to_pure_expression(self, config: FrameToPureConfig) -> PyLegendUnion[str, PureExpression]:  # type: ignore
         op1_prerequisites: PyLegendOptional[PyLegendList[PrerequisitePureExpression]] = None
         op2_prerequisites: PyLegendOptional[PyLegendList[PrerequisitePureExpression]] = None
         op1_expr: str
