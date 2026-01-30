@@ -19,6 +19,7 @@ from pylegend._typing import (
     PyLegendList,
     PyLegendDict,
     PyLegendSet,
+    PyLegendSequence,
     TYPE_CHECKING,
 )
 from pylegend.core.language.pandas_api.pandas_api_aggregate_specification import PyLegendAggInput
@@ -231,6 +232,22 @@ class PandasApiGroupbyTdsFrame:
     def base_frame(self) -> PandasApiBaseTdsFrame:
         return self.__base_frame
 
+    def columns(self) -> PyLegendSequence[TdsColumn]:
+        columns_of_this_frame = list()
+
+        grouping_column_names = set([col.get_name() for col in self.get_grouping_columns()])
+        selected_columns = self.get_selected_columns()
+        if selected_columns is None:
+            for col in self.base_frame().columns():
+                if col.get_name() in grouping_column_names:
+                    continue
+                columns_of_this_frame.append(col)
+        else:
+            for col in selected_columns:
+                columns_of_this_frame.append(col)
+
+        return columns_of_this_frame
+
     def get_grouping_columns(self) -> PyLegendList[TdsColumn]:
         return self.__grouping_columns.copy()
 
@@ -383,3 +400,25 @@ class PandasApiGroupbyTdsFrame:
 
     def count(self) -> "PandasApiTdsFrame":
         return self.aggregate("count", 0)
+
+    def rank(
+            self,
+            method: str = 'min',
+            ascending: bool = True,
+            na_option: str = 'bottom',
+            pct: bool = False,
+            axis: PyLegendUnion[int, str] = 0
+    ) -> "PandasApiTdsFrame":
+        from pylegend.core.tds.pandas_api.frames.pandas_api_applied_function_tds_frame import (
+            PandasApiAppliedFunctionTdsFrame
+        )
+        from pylegend.core.tds.pandas_api.frames.functions.rank_function import RankFunction
+        return PandasApiAppliedFunctionTdsFrame(RankFunction(
+            base_frame=self,
+            axis=axis,
+            method=method,
+            numeric_only=False,
+            na_option=na_option,
+            ascending=ascending,
+            pct=pct
+        ))
