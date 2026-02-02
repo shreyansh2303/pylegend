@@ -15,7 +15,7 @@
 import copy
 from abc import ABCMeta, abstractmethod
 from datetime import date, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, overload
 
 from typing_extensions import Concatenate
 
@@ -95,6 +95,14 @@ class PandasApiBaseTdsFrame(PandasApiTdsFrame, BaseTdsFrame, metaclass=ABCMeta):
         if self._transformed_frame is None:
             return [c.copy() for c in self.__columns]
         return self._transformed_frame.columns()
+
+    @overload  # type: ignore[override]
+    def __getitem__(self, key: str) -> "Series":
+        ...
+
+    @overload
+    def __getitem__(self, key: PyLegendList[str]) -> "PandasApiTdsFrame":
+        ...
 
     def __getitem__(
             self,
@@ -665,7 +673,7 @@ class PandasApiBaseTdsFrame(PandasApiTdsFrame, BaseTdsFrame, metaclass=ABCMeta):
             # Compute row callable via func on the Series
             def _row_callable(
                     _row: PandasApiTdsRow,
-                    _s: Series = series,  # type: ignore
+                    _s: Series = series,
                     _a: PyLegendTuple[PyLegendPrimitiveOrPythonPrimitive, ...] = args,
                     _k: PyLegendPrimitiveOrPythonPrimitive = kwargs  # type: ignore
             ) -> PyLegendPrimitiveOrPythonPrimitive:
@@ -844,6 +852,29 @@ class PandasApiBaseTdsFrame(PandasApiTdsFrame, BaseTdsFrame, metaclass=ABCMeta):
                 limit=limit
             )
         )
+
+    def rank(
+            self,
+            axis: PyLegendUnion[int, str] = 0,
+            method: str = 'min',
+            numeric_only: bool = False,
+            na_option: str = 'bottom',
+            ascending: bool = True,
+            pct: bool = False
+    ) -> "PandasApiTdsFrame":
+        from pylegend.core.tds.pandas_api.frames.pandas_api_applied_function_tds_frame import (
+            PandasApiAppliedFunctionTdsFrame
+        )
+        from pylegend.core.tds.pandas_api.frames.functions.rank_function import RankFunction
+        return PandasApiAppliedFunctionTdsFrame(RankFunction(
+            base_frame=self,
+            axis=axis,
+            method=method,
+            numeric_only=numeric_only,
+            na_option=na_option,
+            ascending=ascending,
+            pct=pct
+        ))
 
     @abstractmethod
     def get_super_type(self) -> PyLegendType[PyLegendTdsFrame]:
