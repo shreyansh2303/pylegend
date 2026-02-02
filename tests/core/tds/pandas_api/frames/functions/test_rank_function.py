@@ -317,10 +317,11 @@ class TestRankFunctionOnBaseFrame:
             PrimitiveTdsColumn.float_column("height"),
         ]
         frame: PandasApiTdsFrame = PandasApiTableSpecInputFrame(['test_schema', 'test_table'], columns)
-        frame["age_rank"] = frame["age"].rank()
-        frame['age_rank_plus_2'] = frame["age"].rank() + 4
-        frame['age_rank_plus_2'] = frame["age"].rank() + 2
-        frame["name_age_combined"] = frame["age_rank_plus_2"] + frame["height"].rank()/5 + frame["name"].rank()
+        frame["age_rank"] = frame["age"].rank()  # type: ignore[assignment]
+        frame['age_rank_plus_2'] = frame["age"].rank() + 4  # type: ignore[operator]
+        frame['age_rank_plus_2'] = frame["age"].rank() + 2  # type: ignore[operator]
+        frame["name_age_combined"] = \
+            frame["age_rank_plus_2"] + frame["height"].rank()/5 + frame["name"].rank()  # type: ignore[operator]
 
         expected = '''
             SELECT
@@ -332,7 +333,7 @@ class TestRankFunctionOnBaseFrame:
                 (((rank() OVER (ORDER BY "root".age) + 2) + ((1.0 * rank() OVER (ORDER BY "root".height)) / 5)) + rank() OVER (ORDER BY "root".name)) AS "name_age_combined"
             FROM
                 test_schema.test_table AS "root"
-        '''
+        '''  # noqa: E501
         expected = dedent(expected).strip()
         assert frame.to_sql_query(FrameToSqlConfig()) == expected
 
@@ -347,7 +348,7 @@ class TestRankFunctionOnBaseFrame:
               ->extend(over([ascending(~height)]), ~height__internal_pylegend_column__:{p,w,r | $p->rank($w, $r)})
               ->extend(over([ascending(~name)]), ~name__internal_pylegend_column__:{p,w,r | $p->rank($w, $r)})
               ->project(~[name:c|$c.name, age:c|$c.age, height:c|$c.height, age_rank:c|$c.age_rank, age_rank_plus_2:c|$c.age_rank_plus_2, name_age_combined:c|((toOne($c.age_rank_plus_2) + (toOne($c.height__internal_pylegend_column__) / 5)) + toOne($c.name__internal_pylegend_column__))])
-        '''
+        '''  # noqa: E501
         expected = dedent(expected).strip()
         assert frame.to_pure_query(FrameToPureConfig()) == expected
         assert generate_pure_query_and_compile(frame, FrameToPureConfig(), self.legend_client) == expected
@@ -359,13 +360,13 @@ class TestRankFunctionOnBaseFrame:
             PrimitiveTdsColumn.float_column("present height"),
         ]
         frame: PandasApiTdsFrame = PandasApiTableSpecInputFrame(['test_schema', 'test_table'], columns)
-        frame["ranked height"] = frame["present height"].rank()
+        frame["ranked height"] = frame["present height"].rank()  # type: ignore[assignment]
 
         expected = '''
             #Table(test_schema.test_table)#
               ->extend(over([ascending(~'present height')]), ~'present height__internal_pylegend_column__':{p,w,r | $p->rank($w, $r)})
               ->project(~[name:c|$c.name, 'present age':c|$c.'present age', 'present height':c|$c.'present height', 'ranked height':c|$c.'present height__internal_pylegend_column__'])
-        '''
+        '''  # noqa: E501
         expected = dedent(expected).strip()
         assert frame.to_pure_query(FrameToPureConfig()) == expected
         assert generate_pure_query_and_compile(frame, FrameToPureConfig(), self.legend_client) == expected
@@ -429,7 +430,7 @@ class TestRankFunctionOnGroupbyFrame:
             PrimitiveTdsColumn.integer_column("random_col")
         ]
         frame: PandasApiTdsFrame = PandasApiTableSpecInputFrame(['test_schema', 'test_table'], columns)
-        frame = frame.groupby("group_col")["val_col"].rank(method='min')
+        frame = frame.groupby("group_col")["val_col"].rank(method='min')  # type: ignore[assignment]
 
         expected = '''
             SELECT
@@ -643,7 +644,7 @@ class TestRankFunctionOnGroupbyFrame:
         assert frame.to_pure_query(FrameToPureConfig()) == expected
         assert generate_pure_query_and_compile(frame, FrameToPureConfig(), self.legend_client) == expected
 
-    def test_groupby_rank_with_assign(self):
+    def test_groupby_rank_with_assign(self) -> None:
         columns = [
             PrimitiveTdsColumn.string_column("group_col"),
             PrimitiveTdsColumn.integer_column("val_col"),
@@ -674,13 +675,14 @@ class TestRankFunctionOnGroupbyFrame:
         assert frame.to_pure_query(FrameToPureConfig()) == expected
         assert generate_pure_query_and_compile(frame, FrameToPureConfig(), self.legend_client) == expected
 
+
 class TestRankFunctionEndtoEnd:
     def test_e2e_rank_no_arguments(self, legend_test_server: PyLegendDict[str, PyLegendUnion[int,]]) -> None:
         frame: PandasApiTdsFrame = simple_relation_person_service_frame_pandas_api(legend_test_server["engine_port"])
-        frame["First Name Rank"] = frame["First Name"].rank(na_option='bottom')
-        frame["Last Name Rank"] = frame["Last Name"].rank(na_option='bottom')
-        frame["Age Rank"] = frame["Age"].rank(na_option='bottom')
-        frame["Firm/Legal Name Rank"] = frame["Firm/Legal Name"].rank(na_option='bottom')
+        frame["First Name Rank"] = frame["First Name"].rank(na_option='bottom')  # type: ignore[assignment]
+        frame["Last Name Rank"] = frame["Last Name"].rank(na_option='bottom')  # type: ignore[assignment]
+        frame["Age Rank"] = frame["Age"].rank(na_option='bottom')  # type: ignore[assignment]
+        frame["Firm/Legal Name Rank"] = frame["Firm/Legal Name"].rank(na_option='bottom')  # type: ignore[assignment]
 
         expected = {
             "columns": [
@@ -721,10 +723,14 @@ class TestRankFunctionEndtoEnd:
 
     def test_e2e_pct_rank(self, legend_test_server: PyLegendDict[str, PyLegendUnion[int,]]) -> None:
         frame: PandasApiTdsFrame = simple_relation_person_service_frame_pandas_api(legend_test_server["engine_port"])
-        frame["First Name Rank"] = frame["First Name"].rank(pct=True, ascending=False, na_option='bottom')
-        frame["Last Name Rank"] = frame["Last Name"].rank(pct=True, ascending=False, na_option='bottom')
-        frame["Age Rank"] = frame["Age"].rank(pct=True, ascending=False, na_option='bottom')
-        frame["Firm/Legal Name Rank"] = frame["Firm/Legal Name"].rank(pct=True, ascending=False, na_option='bottom')
+        frame["First Name Rank"] = \
+            frame["First Name"].rank(pct=True, ascending=False, na_option='bottom')  # type: ignore[assignment]
+        frame["Last Name Rank"] = \
+            frame["Last Name"].rank(pct=True, ascending=False, na_option='bottom')  # type: ignore[assignment]
+        frame["Age Rank"] = \
+            frame["Age"].rank(pct=True, ascending=False, na_option='bottom')  # type: ignore[assignment]
+        frame["Firm/Legal Name Rank"] = \
+            frame["Firm/Legal Name"].rank(pct=True, ascending=False, na_option='bottom')  # type: ignore[assignment]
 
         expected = {
             "columns": ["First Name", "Last Name", "Age", "Firm/Legal Name",
@@ -739,7 +745,7 @@ class TestRankFunctionEndtoEnd:
                 # Anthony (6/6=1.0), Allen (6/6=1.0), 22 (4/6=0.66..), Firm X (0.0)
                 {"values": ['Anthony', 'Allen', 22, 'Firm X', 1.0, 1.0, 0.6666666666666666, 0.0]},
                 # Fabrice (4/6=0.66..), Roberts (1/6=0.16..), 34 (1/6=0.16..), Firm A (6/6=1.0)
-                {"values": ['Fabrice', 'Roberts', 34, 'Firm A', 0.6666666666666666, 0.16666666666666666, 0.16666666666666666, 1.0]},
+                {"values": ['Fabrice', 'Roberts', 34, 'Firm A', 0.6666666666666666, 0.16666666666666666, 0.16666666666666666, 1.0]},  # noqa: E501
                 # Oliver (1/6=0.16..), Hill (3/6=0.5), 32 (2/6=0.33..), Firm B (5/6=0.83..)
                 {"values": ['Oliver', 'Hill', 32, 'Firm B', 0.16666666666666666, 0.5, 0.3333333333333333, 0.8333333333333334]},
                 # David (5/6=0.83..), Harris (5/6=0.83..), 35 (0.0), Firm C (4/6=0.66..)
@@ -755,7 +761,12 @@ class TestRankFunctionEndtoEnd:
         frame["Last Name Rank"] = frame.groupby("Firm/Legal Name")["Last Name"].rank(na_option='bottom')
         frame["Age Rank"] = frame.groupby("Firm/Legal Name")["Age"].rank(na_option='bottom')
 
-        frame = frame[["Firm/Legal Name", "First Name", "First Name Rank", "Last Name", "Last Name Rank", "Age", "Age Rank"]]
+        frame = frame[[
+            "Firm/Legal Name",
+            "First Name", "First Name Rank",
+            "Last Name", "Last Name Rank",
+            "Age", "Age Rank"
+        ]]  # type: ignore[assignment]
 
         expected = {
             'columns': ['Firm/Legal Name', 'First Name', 'First Name Rank', 'Last Name', 'Last Name Rank', 'Age', 'Age Rank'],

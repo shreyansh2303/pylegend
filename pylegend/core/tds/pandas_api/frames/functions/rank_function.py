@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import copy
 
 from pylegend._typing import (
     PyLegendDict,
@@ -56,6 +55,7 @@ from pylegend.core.language.shared.helpers import generate_pure_lambda, escape_c
 
 if TYPE_CHECKING:
     from pylegend.core.tds.pandas_api.frames.pandas_api_groupby_tds_frame import PandasApiGroupbyTdsFrame
+
 
 class RankFunction(PandasApiAppliedFunction):
     __base_frame: PyLegendUnion[PandasApiBaseTdsFrame, "PandasApiGroupbyTdsFrame"]
@@ -156,9 +156,10 @@ class RankFunction(PandasApiAppliedFunction):
 
         return window_expr
 
-
     @staticmethod
-    def render_single_column_expression(c: PyLegendUnion[PyLegendTuple[str, PyLegendPrimitive]], suffix: str, config: FrameToPureConfig) -> str:
+    def render_single_column_expression(
+            c: PyLegendUnion[PyLegendTuple[str, PyLegendPrimitive]], suffix: str, config: FrameToPureConfig
+    ) -> str:
         escaped_col_name: str = escape_column_name(c[0] + suffix)
         expr_str: str = c[1].to_pure_expression(config)
         return f"{escaped_col_name}:{generate_pure_lambda('p,w,r', expr_str)}"
@@ -211,7 +212,6 @@ class RankFunction(PandasApiAppliedFunction):
             extend_str, column_name=escape_column_name(c[0] + temp_column_name_suffix)
         )
         return pure_expr
-
 
     def base_frame(self) -> PandasApiBaseTdsFrame:
         from pylegend.core.tds.pandas_api.frames.pandas_api_groupby_tds_frame import PandasApiGroupbyTdsFrame
