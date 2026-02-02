@@ -329,9 +329,8 @@ class GroupbySeries(PyLegendColumnExpression, PyLegendPrimitive, BaseTdsFrame):
         else:
             new_series = IntegerGroupbySeries(self._base_groupby_frame)
 
-        applied_function_frame = self._base_groupby_frame.rank(
-            method, ascending, na_option, pct, axis
-        )
+        applied_function_frame = self._base_groupby_frame.rank(method, ascending, na_option, pct, axis)
+        assert isinstance(applied_function_frame, PandasApiAppliedFunctionTdsFrame)
         new_series.applied_function_frame = applied_function_frame
         return new_series
 
