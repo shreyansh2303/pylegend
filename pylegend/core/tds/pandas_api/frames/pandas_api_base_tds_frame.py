@@ -805,6 +805,20 @@ class PandasApiBaseTdsFrame(PandasApiTdsFrame, BaseTdsFrame, metaclass=ABCMeta):
             )
         )
 
+    def expanding(
+            self,
+            min_periods: int = 1,
+            axis: PyLegendUnion[int, str] = 0,
+            method: PyLegendOptional[str] = None
+    ) -> "PandasApiExpandingTdsFrame":
+        from pylegend.core.tds.pandas_api.frames.pandas_api_expanding_tds_frame import PandasApiExpandingTdsFrame
+        return PandasApiExpandingTdsFrame(
+            base_frame=self,
+            min_periods=min_periods,
+            axis=axis,
+            method=method
+        )
+
     @abstractmethod
     def get_super_type(self) -> PyLegendType[PyLegendTdsFrame]:
         pass  # pragma: no cover

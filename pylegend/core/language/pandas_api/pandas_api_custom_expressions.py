@@ -33,7 +33,8 @@ from pylegend._typing import (
     PyLegendDict,
 )
 from pylegend.core.language.shared.column_expressions import PyLegendColumnExpression
-from pylegend.core.language.shared.expression import PyLegendExpressionFloatReturn, PyLegendExpressionIntegerReturn
+from pylegend.core.language.shared.expression import PyLegendExpressionFloatReturn, PyLegendExpressionIntegerReturn, \
+    PyLegendExpressionNumberReturn, PyLegendExpression
 from pylegend.core.language.shared.helpers import escape_column_name
 from pylegend.core.sql.metamodel import (
     Expression,
@@ -218,7 +219,7 @@ class PandasApiWindowFrameMode(Enum):
         return pandas_api_to_sql_node_map[self]
 
 
-class PandasApiWindowFrame(metaclass=ABCMeta):
+class PandasApiWindowFrame:
     __mode: PandasApiWindowFrameMode
     __start: PandasApiFrameBound
     __end: PyLegendOptional[PandasApiFrameBound]
@@ -355,6 +356,41 @@ class PandasApiPartialFrame:
     ) -> "PandasApiTdsRow":
         from pylegend.core.language.pandas_api.pandas_api_tds_row import PandasApiLagRow
         return PandasApiLagRow(self, row, num_rows_to_lag_by)
+
+    def sum(
+            self,
+            window: "PandasApiWindowReference",
+            column: "PyLegendColumnExpression"
+    ) -> PyLegendNumber:
+        return PyLegendNumber(PandasApiWindowSumExpression(self, window, column))
+
+    def min(
+            self,
+            window: "PandasApiWindowReference",
+            column: "PyLegendColumnExpression"
+    ) -> PyLegendNumber:
+        return PyLegendNumber(PandasApiWindowMinExpression(self, window, column))
+
+    def max(
+            self,
+            window: "PandasApiWindowReference",
+            column: "PyLegendColumnExpression"
+    ) -> PyLegendNumber:
+        return PyLegendNumber(PandasApiWindowMaxExpression(self, window, column))
+
+    def mean(
+            self,
+            window: "PandasApiWindowReference",
+            column: "PyLegendColumnExpression"
+    ) -> PyLegendFloat:
+        return PyLegendFloat(PandasApiWindowMeanExpression(self, window, column))
+
+    def count(
+            self,
+            window: "PandasApiWindowReference",
+            column: "PyLegendColumnExpression"
+    ) -> PyLegendInteger:
+        return PyLegendInteger(PandasApiWindowCountExpression(self, window, column))
 
     def to_pure_expression(self, config: FrameToPureConfig) -> str:
         return f"${self.__var_name}"
@@ -497,3 +533,72 @@ class PandasApiPercentRankExpression(PyLegendExpressionFloatReturn):
     def to_pure_expression(self, config: FrameToPureConfig) -> str:
         return (f"{self.__partial_frame.to_pure_expression(config)}->percentRank("
                 f"{self.__window_ref.to_pure_expression(config)}, {self.__row.to_pure_expression(config)})")
+
+
+class PandasApiWindowAggregateExpression(PyLegendExpression, metaclass=ABCMeta):
+    __partial_frame: "PandasApiPartialFrame"
+    __window_ref: "PandasApiWindowReference"
+    __column: "PyLegendColumnExpression"
+    __func_name: str
+
+    def __init__(
+            self,
+            partial_frame: "PandasApiPartialFrame",
+            window_ref: "PandasApiWindowReference",
+            column: "PyLegendColumnExpression",
+            func_name: str
+    ) -> None:
+        self.__partial_frame = partial_frame
+        self.__window_ref = window_ref
+        self.__column = column
+        self.__func_name = func_name
+
+    def to_sql_expression(
+            self,
+            frame_name_to_base_query_map: PyLegendDict[str, QuerySpecification],
+            config: FrameToSqlConfig
+    ) -> Expression:
+        col_expr = self.__column.to_sql_expression(frame_name_to_base_query_map, config)
+        return FunctionCall(
+            name=QualifiedName(parts=[self.__func_name]),
+            distinct=False,
+            arguments=[col_expr],
+            filter_=None,
+            window=None  # Window is handled by the wrapper in the main function logic
+        )
+
+    def to_pure_expression(self, config: FrameToPureConfig) -> str:
+        pure_func_map = {
+            "stddev_samp": "stdDev",
+            "variance": "variance",
+            "average": "average",
+            "sum": "plus",  # Pure usually uses 'plus' for sum accumulation or 'sum' depending on context. Tests used 'plus'.
+            "count": "count",
+            "max": "max",
+            "min": "min"
+        }
+        p_func = pure_func_map.get(self.__func_name, self.__func_name)
+
+        # Matches logic in test: : {y | $y->plus()}
+        return (f"{self.__partial_frame.to_pure_expression(config)}->{p_func}("
+                f"{self.__window_ref.to_pure_expression(config)}, {self.__column.to_pure_expression(config)})")
+
+
+class PandasApiWindowSumExpression(PandasApiWindowAggregateExpression, PyLegendExpressionNumberReturn):
+    def __init__(self, p, w, c): super().__init__(p, w, c, "sum")
+
+
+class PandasApiWindowMinExpression(PandasApiWindowAggregateExpression, PyLegendExpressionNumberReturn):
+    def __init__(self, p, w, c): super().__init__(p, w, c, "min")
+
+
+class PandasApiWindowMaxExpression(PandasApiWindowAggregateExpression, PyLegendExpressionNumberReturn):
+    def __init__(self, p, w, c): super().__init__(p, w, c, "max")
+
+
+class PandasApiWindowMeanExpression(PandasApiWindowAggregateExpression, PyLegendExpressionFloatReturn):
+    def __init__(self, p, w, c): super().__init__(p, w, c, "average")
+
+
+class PandasApiWindowCountExpression(PandasApiWindowAggregateExpression, PyLegendExpressionIntegerReturn):
+    def __init__(self, p, w, c): super().__init__(p, w, c, "count")
