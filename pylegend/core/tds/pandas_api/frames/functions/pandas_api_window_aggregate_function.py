@@ -46,6 +46,7 @@ class PandasApiWindowAggregateFunction(PandasApiAppliedFunction):
     ]
 
     __zero_column_name: str
+    __aggregates_list: PyLegendList[PyLegendTuple[str, PyLegendPrimitiveOrPythonPrimitive, PyLegendPrimitive]]
 
     @classmethod
     def name(cls) -> str:
@@ -66,6 +67,7 @@ class PandasApiWindowAggregateFunction(PandasApiAppliedFunction):
         self.__kwargs = kwargs
         self.__zero_column_name = "__internal_pylegend_column__"
         self.__calculated_expressions = self.__construct_expressions()
+        self.__aggregates_list = []
 
     def to_sql(self, config: FrameToSqlConfig) -> QuerySpecification:
         from pylegend.core.tds.pandas_api.frames.pandas_api_groupby_tds_frame import PandasApiGroupbyTdsFrame
@@ -214,7 +216,6 @@ class PandasApiWindowAggregateFunction(PandasApiAppliedFunction):
                 "or keyword arguments. Please remove extra *args/**kwargs."
             )
 
-        self.__aggregates_list: PyLegendList[PyLegendTuple[str, PyLegendPrimitiveOrPythonPrimitive, PyLegendPrimitive]] = []
 
         normalized_func: dict[str, PyLegendUnion[PyLegendAggFunc, PyLegendAggList]] = (
             self.__normalize_input_func_to_standard_dict(self.__func)
@@ -456,18 +457,37 @@ class PandasApiWindowAggregateFunction(PandasApiAppliedFunction):
         window_ref = PandasApiWindowReference(window, "w")
 
         tds_row = PandasApiTdsRow.from_tds_frame("r", true_base_frame)
-        normalized_func: dict[str, PyLegendUnion[PyLegendAggFunc, PyLegendAggList]] = (
+        normalized_input_func: dict[str, PyLegendUnion[PyLegendAggFunc, PyLegendAggList]] = (
             self.__normalize_input_func_to_standard_dict(self.__func)
         )
 
-        for column_name, agg_input in normalized_func.items():
-            column_name = escape_column_name(column_name)
-            column_selection_lambda = lambda p,w,r: r[column_name]
-            column_direct_expression: PandasApiPrimitive = column_selection_lambda(partial_frame, window_ref, tds_row)
-            collection: PyLegendPrimitiveCollection = create_primitive_collection(column_direct_expression)
+        for column_name, agg_input in normalized_input_func.items():
+            column_primitive: PandasApiPrimitive = tds_row[column_name]
+            collection: PyLegendPrimitiveCollection = create_primitive_collection(column_primitive)
 
-            for func in agg_input if isinstance(agg_input, PyLegendList) else [agg_input]:
-                normalized_func = self.__normalize_agg_func_to_lambda_function(func)
+            if isinstance(agg_input, list):
+                lambda_counter = 0
+                for func in agg_input:
+                    is_anonymous_lambda = False
+                    if not isinstance(func, str):
+                        if getattr(func, "__name__", "<lambda>") == "<lambda>":
+                            is_anonymous_lambda = True
+
+                    if is_anonymous_lambda:
+                        lambda_counter += 1
+
+                    normalized_agg_func = self.__normalize_agg_func_to_lambda_function(func)
+                    agg_result = normalized_agg_func(collection)
+
+                    alias = self._generate_column_alias(column_name, func, lambda_counter)
+                    self.__aggregates_list.append((alias, column_primitive, agg_result))
+
+            else:
+                normalized_agg_func = self.__normalize_agg_func_to_lambda_function(agg_input)
+                agg_result = normalized_agg_func(collection)
+
+                self.__aggregates_list.append((column_name, column_primitive, agg_result))
+
 
 
 
