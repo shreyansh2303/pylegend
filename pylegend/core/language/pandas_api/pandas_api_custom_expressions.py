@@ -133,11 +133,11 @@ class PandasApiSortInfo:
 
     def __init__(
             self,
-            column_expr: PyLegendColumnExpression,
+            column_name: str,
             direction: PandasApiSortDirection,
             null_ordering: SortItemNullOrdering = SortItemNullOrdering.UNDEFINED
     ) -> None:
-        self.__column = column_expr.get_column()
+        self.__column = column_name
         self.__direction = direction
         self.__null_ordering = null_ordering
 

@@ -349,13 +349,12 @@ class RankFunction(PandasApiAppliedFunction):
                 partition_by = [col.get_name() for col in self.__base_frame.get_grouping_columns()]
 
             tds_row = PandasApiTdsRow.from_tds_frame("r", self.base_frame())
-            col_expr = PyLegendColumnExpression(tds_row, current_column_name)
             sort_direction: PandasApiSortDirection
             if self.__ascending:
                 sort_direction = PandasApiSortDirection.ASC
             else:
                 sort_direction = PandasApiSortDirection.DESC
-            order_by = PandasApiSortInfo(col_expr, sort_direction)
+            order_by = PandasApiSortInfo(current_column_name, sort_direction)
 
             window = PandasApiWindow(partition_by, [order_by], frame=None)
             window_ref = PandasApiWindowReference(window=window, var_name="w")
