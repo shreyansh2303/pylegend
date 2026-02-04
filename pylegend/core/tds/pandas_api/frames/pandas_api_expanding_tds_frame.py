@@ -31,6 +31,7 @@ class PandasApiExpandingTdsFrame:
     def aggregate(
             self,
             func: PyLegendAggInput,
+            axis: PyLegendUnion[int, str] = 0,
             *args: PyLegendPrimitiveOrPythonPrimitive,
             **kwargs: PyLegendPrimitiveOrPythonPrimitive
     ) -> "PandasApiBaseTdsFrame":
@@ -42,7 +43,7 @@ class PandasApiExpandingTdsFrame:
         )
         return PandasApiAppliedFunctionTdsFrame(
             PandasApiWindowAggregateFunction(
-                base_frame=self, func=func, *args, **kwargs
+                base_frame=self, func=func, axis=axis, *args, **kwargs
             )
         )
 

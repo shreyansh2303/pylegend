@@ -220,9 +220,9 @@ class PandasApiWindowFrameMode(Enum):
 
 
 class PandasApiWindowFrame:
-    __mode: PandasApiWindowFrameMode
-    __start: PandasApiFrameBound
-    __end: PyLegendOptional[PandasApiFrameBound]
+    mode: PandasApiWindowFrameMode
+    start: PandasApiFrameBound
+    end: PyLegendOptional[PandasApiFrameBound]
 
     def __init__(
             self,
@@ -230,17 +230,17 @@ class PandasApiWindowFrame:
             start: PandasApiFrameBound,
             end: PyLegendOptional[PandasApiFrameBound]
     ):
-        self.__mode = mode
-        self.__start = start
-        self.__end = end
+        self.mode = mode
+        self.start = start
+        self.end = end
 
     def to_sql_node(self):
         return WindowFrame(
-            mode=self.__mode.to_sql_node(),
-            start=self.__start.to_sql_node(),
+            mode=self.mode.to_sql_node(),
+            start=self.start.to_sql_node(),
             end=(
-                None if self.__end is None else
-                self.__end.to_sql_node()
+                None if self.end is None else
+                self.end.to_sql_node()
             )
         )
 
@@ -275,7 +275,7 @@ class PandasApiWindow:
                 [] if self.__order_by is None else
                 [sort_info.to_sql_node(query, config) for sort_info in self.__order_by]
             ),
-            windowFrame=None
+            windowFrame=self.__frame.to_sql_node()
         )
 
     @staticmethod

@@ -54,8 +54,8 @@ class TestUsageOnBaseFrame:
 
         expected_sql = '''
             SELECT
-                SUM("root"."col1") OVER (ORDER BY "__internal_pylegend_column__" ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS "col1",
-                SUM("root"."col2") OVER (ORDER BY "__internal_pylegend_column__" ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS "col2"
+                SUM("root"."col1") OVER (ORDER BY "root"."__internal_pylegend_column__" ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS "col1",
+                SUM("root"."col2") OVER (ORDER BY "root"."__internal_pylegend_column__" ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS "col2"
             FROM
                 (
                     SELECT
@@ -91,14 +91,14 @@ class TestUsageOnBaseFrame:
 
         frame = frame.expanding().agg({
             "col1": ["sum", lambda x: x.count()],
-            "col2": np.min
+            "col2": [lambda x: x.min()]
         })
 
         expected_sql = '''
             SELECT
-                SUM("root"."col1") OVER (ORDER BY "__internal_pylegend_column__" ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS "sum(col1)",
-                COUNT("root"."col1") OVER (ORDER BY "__internal_pylegend_column__" ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS "count(col1)",
-                MIN("root"."col2") OVER (ORDER BY "__internal_pylegend_column__" ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS "col2"
+                SUM("root"."col1") OVER (ORDER BY "root"."__internal_pylegend_column__" ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS "sum(col1)",
+                COUNT("root"."col1") OVER (ORDER BY "root"."__internal_pylegend_column__" ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS "lambda_1(col1)",
+                MIN("root"."col2") OVER (ORDER BY "root"."__internal_pylegend_column__" ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS "col2"
             FROM
                 (
                     SELECT
