@@ -22,7 +22,6 @@ from pylegend._typing import (
     PyLegendCallable,
     TYPE_CHECKING,
 )
-from pylegend.core.language import PyLegendColumnExpression
 from pylegend.core.language.pandas_api.pandas_api_custom_expressions import (
     PandasApiPartialFrame,
     PandasApiSortDirection,

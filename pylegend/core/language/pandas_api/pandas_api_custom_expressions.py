@@ -32,7 +32,6 @@ from pylegend._typing import (
     PyLegendDict,
     TYPE_CHECKING,
 )
-from pylegend.core.language.shared.column_expressions import PyLegendColumnExpression
 from pylegend.core.language.shared.expression import (
     PyLegendExpressionFloatReturn,
     PyLegendExpressionIntegerReturn,
