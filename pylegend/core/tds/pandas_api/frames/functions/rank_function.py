@@ -369,20 +369,14 @@ class RankFunction(PandasApiAppliedFunction):
 
     def _assert_single_column_in_base_frame(self) -> None:
         from pylegend.core.tds.pandas_api.frames.pandas_api_groupby_tds_frame import PandasApiGroupbyTdsFrame
+
         if isinstance(self.__base_frame, PandasApiGroupbyTdsFrame):
-            base_frame_columns = []
-            grouping_column_names = set([col.get_name() for col in self.__base_frame.get_grouping_columns()])
             selected_columns = self.__base_frame.get_selected_columns()
-            if selected_columns is None:
-                for col in self.base_frame().columns():
-                    if col.get_name() in grouping_column_names:
-                        continue
-                    base_frame_columns.append(col)
-            else:
-                for col in selected_columns:
-                    base_frame_columns.append(col)
+            assert selected_columns is not None, "To get an SQL or a pure expression, exactly one column must be selected."
+            base_frame_columns = selected_columns
         else:
             base_frame_columns = list(self.__base_frame.columns())
+
         assert len(base_frame_columns) == 1, (
             "To get an SQL or a pure expression, the base frame must have exactly one column, but got "
             f"{len(base_frame_columns)} columns: {[str(col) for col in base_frame_columns]}"
