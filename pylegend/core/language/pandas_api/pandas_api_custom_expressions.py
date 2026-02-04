@@ -121,7 +121,6 @@ class PandasApiStrictDate(PandasApiPrimitive, PyLegendStrictDate):
         PyLegendStrictDate.__init__(self, expr.value())
 
 
-
 class PandasApiSortDirection(Enum):
     ASC = 1,
     DESC = 2
