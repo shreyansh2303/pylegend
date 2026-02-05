@@ -14,7 +14,7 @@ from pylegend._typing import (
 )
 from pylegend.core.language import PyLegendPrimitive, PyLegendColumnExpression, PyLegendPrimitiveOrPythonPrimitive, \
     PyLegendPrimitiveCollection, create_primitive_collection, PyLegendInteger, PyLegendFloat, PyLegendNumber, PyLegendString, \
-    PyLegendBoolean, PyLegendDate, PyLegendDateTime, PyLegendStrictDate
+    PyLegendBoolean, PyLegendDate, PyLegendDateTime, PyLegendStrictDate, convert_literal_to_literal_expression
 from pylegend.core.language.pandas_api.pandas_api_aggregate_specification import PyLegendAggInput, PyLegendAggFunc, \
     PyLegendAggList
 from pylegend.core.language.pandas_api.pandas_api_custom_expressions import PandasApiWindow, PandasApiFrameBound, \
@@ -129,59 +129,42 @@ class PandasApiWindowAggregateFunction(PandasApiAppliedFunction):
 
         return new_query
 
-
     def to_pure(self, config: FrameToPureConfig) -> str:
-        # 1. Extend with internal column: ->extend(~__internal__:{r|0})
-        return ""
-        internal_col_def = f"~{escape_column_name(self.__internal_col_name)}:{{r|0}}"
+        def render_single_column_expression(
+                c: PyLegendUnion[
+                    PyLegendTuple[str, PyLegendPrimitiveOrPythonPrimitive],
+                    PyLegendTuple[str, PyLegendPrimitiveOrPythonPrimitive, PyLegendPrimitive]
+                ]
+        ) -> str:
+            escaped_col_name = escape_column_name(c[0])
+            expr_str = (c[1].to_pure_expression(config) if isinstance(c[1], PyLegendPrimitive) else
+                        convert_literal_to_literal_expression(c[1]).to_pure_expression(config))
+            if len(c) == 2:
+                return f"{escaped_col_name}:{generate_pure_lambda('p,w,r', expr_str)}"
+            else:
+                agg_expr_str = c[2].to_pure_expression(config).replace(expr_str, "$c")
+                return (f"{escaped_col_name}:"
+                        f"{generate_pure_lambda('p,w,r', expr_str)}:"
+                        f"{generate_pure_lambda('c', agg_expr_str)}")
 
-        # 2. Build the extend chain for aggregations
-        extend_ops = []
-        for alias, result_expr, window in self.__calculated_expressions:
-            # Map the expression, e.g., {p,w,r | $r.col1}:{y | $y->plus()}
-            # Note: Our PandasApiWindowAggregateExpression.to_pure_expression handles the {p,w,r...} generation
-            # provided we implemented it correctly in custom_expressions.py
+        window = self.__window.to_pure_expression(config)
 
-            # However, `PandasApiWindowAggregateExpression` returns the FULL function call (e.g. p->sum(w, r.col)).
-            # Pure syntax for `extend` is: ->extend(over(...), ~new_col:{p,w,r | ...})
-            # Our custom expression returns exactly that lambda body logic if we designed it right,
-            # but usually we need to wrap it.
-
-            # Let's rely on the expression's own generation:
-            # It returns: "$p->sum($w, $r.col)"
-            # We need: "~alias:{p,w,r | $p->sum($w, $r.col)}"
-
-            pure_lambda = generate_pure_lambda("p,w,r", result_expr.to_pure_expression(config))
-
-            # Window definition
-            window_str = window.to_pure_expression(config)
-
-            extend_ops.append(
-                f"->extend({window_str}, ~{escape_column_name(alias)}:{pure_lambda})"
-            )
-
-        # 3. Project the final columns (aliases only)
-        # ->project(~[alias1:p|$p.alias1, ...])
-        project_cols = []
-        for alias, _, _ in self.__calculated_expressions:
-            col_ref = f"p|$p.{escape_column_name(alias)}"
-            project_cols.append(f"{escape_column_name(alias)}:{col_ref}")
-
-        project_str = f"->project(~[{config.separator(2)}{(', ' + config.separator(2)).join(project_cols)}{config.separator(1)}])"
-
-        # Combine
-        base_str = self.__base_frame.to_pure(config)
-
-        # Handle "group by" base frame differently?
-        # No, "expanding" works on the base rows, so we usually reference the underlying frame
-        # and just use the grouping keys for partition.
-
-        return (
-            f"{base_str}{config.separator(1)}"
-            f"->extend({internal_col_def})"
-            f"{''.join([f'{config.separator(1)}{op}' for op in extend_ops])}"
-            f"{config.separator(1)}{project_str}"
-        )
+        if all([len(t) == 2 for t in self.__aggregates_list]) or all(
+                [len(t) == 3 for t in self.__aggregates_list]):
+            if len(self.__aggregates_list) == 1:
+                extend_str = f"->extend({window}, ~{render_single_column_expression(self.__aggregates_list[0])})"
+            else:
+                extend_str = (f"->extend({window}, ~[{config.separator(2)}" +
+                              ("," + config.separator(2, True)).join(
+                                  [render_single_column_expression(x) for x in self.__aggregates_list]
+                              ) +
+                              f"{config.separator(1)}])")
+            return f"{self.base_frame().to_pure(config)}{config.separator(1)}" + extend_str
+        else:
+            extend_str = self.base_frame().to_pure(config)
+            for c in self.__aggregates_list:
+                extend_str += f"{config.separator(1)}->extend({window}, ~{render_single_column_expression(c)})"
+            return extend_str
 
     def base_frame(self) -> PandasApiBaseTdsFrame:
         from pylegend.core.tds.pandas_api.frames.pandas_api_groupby_tds_frame import PandasApiGroupbyTdsFrame
@@ -244,43 +227,6 @@ class PandasApiWindowAggregateFunction(PandasApiAppliedFunction):
                 "AggregateFunction currently does not support additional positional "
                 "or keyword arguments. Please remove extra *args/**kwargs."
             )
-
-
-        # normalized_func: dict[str, PyLegendUnion[PyLegendAggFunc, PyLegendAggList]] = (
-        #     self.__normalize_input_func_to_standard_dict(self.__func)
-        # )
-        #
-        # tds_row = PandasApiTdsRow.from_tds_frame("r", self.base_frame())
-        #
-        # for column_name, agg_input in normalized_func.items():
-        #     mapper_function: PyLegendCallable[[PandasApiTdsRow], PyLegendPrimitiveOrPythonPrimitive] = eval(
-        #         f'lambda r: r["{column_name}"]'
-        #     )
-        #     map_result: PyLegendPrimitiveOrPythonPrimitive = mapper_function(tds_row)
-        #     collection: PyLegendPrimitiveCollection = create_primitive_collection(map_result)
-        #
-        #     if isinstance(agg_input, list):
-        #         lambda_counter = 0
-        #         for func in agg_input:
-        #             is_anonymous_lambda = False
-        #             if not isinstance(func, str):
-        #                 if getattr(func, "__name__", "<lambda>") == "<lambda>":
-        #                     is_anonymous_lambda = True
-        #
-        #             if is_anonymous_lambda:
-        #                 lambda_counter += 1
-        #
-        #             normalized_agg_func = self.__normalize_agg_func_to_lambda_function(func)
-        #             agg_result = normalized_agg_func(collection)
-        #
-        #             alias = self._generate_column_alias(column_name, func, lambda_counter)
-        #             self.__aggregates_list.append((alias, map_result, agg_result))
-        #
-        #     else:
-        #         normalized_agg_func = self.__normalize_agg_func_to_lambda_function(agg_input)
-        #         agg_result = normalized_agg_func(collection)
-        #
-        #         self.__aggregates_list.append((column_name, map_result, agg_result))
 
         return True
 
@@ -476,8 +422,8 @@ class PandasApiWindowAggregateFunction(PandasApiAppliedFunction):
 
         order_by = [PandasApiDirectSortInfo(self.__zero_column_name, PandasApiSortDirection.ASC)]
 
-        start_bound = PandasApiFrameBound(PandasApiFrameBoundType.UNBOUNDED_PRECEDING, value=None)
-        end_bound = PandasApiFrameBound(PandasApiFrameBoundType.CURRENT_ROW, value=None)
+        start_bound = PandasApiFrameBound(PandasApiFrameBoundType.UNBOUNDED_PRECEDING)
+        end_bound = PandasApiFrameBound(PandasApiFrameBoundType.CURRENT_ROW)
         window_frame = PandasApiWindowFrame(PandasApiWindowFrameMode.ROWS, start_bound, end_bound)
 
         window = PandasApiWindow(partition_by, order_by, window_frame)
@@ -487,8 +433,6 @@ class PandasApiWindowAggregateFunction(PandasApiAppliedFunction):
         normalized_input_func: dict[str, PyLegendUnion[PyLegendAggFunc, PyLegendAggList]] = (
             self.__normalize_input_func_to_standard_dict(self.__func)
         )
-
-        print(f'aggregate length = {len(self.__aggregates_list)}')
 
         for column_name, agg_input in normalized_input_func.items():
             column_primitive: PandasApiPrimitive = tds_row[column_name]
@@ -516,92 +460,3 @@ class PandasApiWindowAggregateFunction(PandasApiAppliedFunction):
                 agg_result = normalized_agg_func(collection)
 
                 self.__aggregates_list.append((column_name, column_primitive, agg_result))
-
-
-
-        print(f'aggregate length = {len(self.__aggregates_list)}')
-
-
-
-
-        # Construct p,w,r
-        # partial_frame = PandasApiPartialFrame(true_base_frame, "p")
-        # window_ref = PandasApiWindowReference(window, "w")
-
-        # normalized = self.__normalize_input(self.__func, true_base_frame)
-        #
-        # results = []
-        #
-        # tds_row = PandasApiTdsRow.from_tds_frame("r", self.base_frame())
-        # for col_name, operations in normalized.items():
-        #     col_expr = PyLegendColumnExpression(tds_row, col_name)
-        #
-        #     for op_name in operations:
-        #         # Generate Result Name: e.g. "sum(col1)" or "col1" if single op
-        #         alias = self.__generate_alias(col_name, op_name, len(operations) > 1)
-        #
-        #         result_expr: PyLegendPrimitive
-        #         if op_name == 'sum':
-        #             result_expr = partial_frame.sum(window_ref, col_expr)
-        #         elif op_name in ['mean', 'average']:
-        #             result_expr = partial_frame.mean(window_ref, col_expr)
-        #         elif op_name == 'min':
-        #             result_expr = partial_frame.min(window_ref, col_expr)
-        #         elif op_name == 'max':
-        #             result_expr = partial_frame.max(window_ref, col_expr)
-        #         elif op_name in ['count', 'size']:
-        #             result_expr = partial_frame.count(window_ref, col_expr)
-        #         else:
-        #             raise NotImplementedError(f"Expanding window function '{op_name}' not supported")
-        #
-        #         results.append((alias, result_expr, window))
-        #
-        # return results
-
-    def __normalize_input(self, func, frame) -> dict[str, list[str]]:
-        # Returns {col_name: [op1, op2]}
-        normalized = {}
-        all_cols = [c.get_name() for c in frame.columns()]
-
-        # Filter numeric columns for implicit selection?
-        # For now, apply to all or let user specify.
-
-        if isinstance(func, str):
-            for c in all_cols:
-                normalized[c] = [func]
-
-        elif isinstance(func, list):
-            for c in all_cols:
-                normalized[c] = [str(f) for f in func]
-
-        elif isinstance(func, dict):
-            for key, value in func.items():
-                if key not in all_cols:
-                    continue  # or raise error
-
-                if isinstance(value, str):
-                    normalized[key] = [value]
-                elif isinstance(value, list):
-                    normalized[key] = [str(v) for v in value]
-                elif callable(value):
-                    # Handle lambda mappings if possible, or mapping known functions
-                    # This is tricky without the full AggregateFunction infra.
-                    # For this implementation, we assume strings or simple mappings.
-                    # Test case passed: "sum", lambda x: x.count()
-                    # We need to extract names from callables.
-                    name = getattr(value, "__name__", "lambda")
-                    if name == "<lambda>":
-                        # We can't easily introspect the lambda content here to determine 'count' vs 'sum'
-                        # unless we use the code provided in AggregateFunction.
-                        # For the specific test case `x.count()`, let's assume 'count'.
-                        # This is a simplification.
-                        normalized[key] = ["count"]  # Placeholder logic
-                    else:
-                        normalized[key] = [name]
-
-        return normalized
-
-    def __generate_alias(self, col: str, op: str, is_multi: bool) -> str:
-        if not is_multi:
-            return col
-        return f"{op}({col})"
