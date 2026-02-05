@@ -23,7 +23,7 @@ from pylegend.core.language import (
     PyLegendFloat,
     PyLegendDate,
     PyLegendDateTime,
-    PyLegendStrictDate,
+    PyLegendStrictDate, convert_literal_to_literal_expression,
 )
 from pylegend._typing import (
     PyLegendSequence,
@@ -32,10 +32,9 @@ from pylegend._typing import (
     PyLegendDict,
     TYPE_CHECKING,
 )
-from pylegend.core.language.shared.expression import (
-    PyLegendExpressionFloatReturn,
-    PyLegendExpressionIntegerReturn,
-)
+from pylegend.core.language.shared.column_expressions import PyLegendColumnExpression
+from pylegend.core.language.shared.expression import PyLegendExpressionFloatReturn, PyLegendExpressionIntegerReturn, \
+    PyLegendExpressionNumberReturn, PyLegendExpression
 from pylegend.core.language.shared.helpers import escape_column_name
 from pylegend.core.sql.metamodel import (
     Expression,
@@ -46,12 +45,9 @@ from pylegend.core.sql.metamodel import (
     SortItem,
     SortItemNullOrdering,
     SortItemOrdering,
-    Window
+    Window, WindowFrame, Node, WindowFrameMode, FrameBound, FrameBoundType
 )
-from pylegend.core.tds.tds_frame import (
-    FrameToPureConfig,
-    FrameToSqlConfig,
-)
+from pylegend.core.tds.tds_frame import FrameToPureConfig, FrameToSqlConfig
 
 __all__: PyLegendSequence[str] = [
     "PandasApiPrimitive",
@@ -168,8 +164,157 @@ class PandasApiSortInfo:
         return f"{func}(~{escape_column_name(self.__column)})"
 
 
-class PandasApiWindowFrame(metaclass=ABCMeta):
-    pass
+class PandasApiDirectSortInfo(PandasApiSortInfo):
+    _column: str
+    _direction: PandasApiSortDirection
+    _null_ordering: SortItemNullOrdering
+
+    def __init__(
+            self,
+            column_name: str,
+            direction: PandasApiSortDirection,
+            null_ordering: SortItemNullOrdering = SortItemNullOrdering.UNDEFINED
+    ) -> None:
+        self._column = column_name
+        self._direction = direction
+        self._null_ordering = null_ordering
+
+
+class PandasApiFrameBoundType(Enum):
+    UNBOUNDED_PRECEDING = 1,
+    PRECEDING = 2,
+    CURRENT_ROW = 3,
+    FOLLOWING = 4,
+    UNBOUNDED_FOLLOWING = 5
+
+    def to_sql_node(
+            self,
+            query: QuerySpecification,
+            config: FrameToSqlConfig
+    ) -> FrameBoundType:
+        pandas_api_to_sql_node_map = {
+            PandasApiFrameBoundType.UNBOUNDED_PRECEDING: FrameBoundType.UNBOUNDED_PRECEDING,
+            PandasApiFrameBoundType.PRECEDING: FrameBoundType.PRECEDING,
+            PandasApiFrameBoundType.CURRENT_ROW: FrameBoundType.CURRENT_ROW,
+            PandasApiFrameBoundType.FOLLOWING: FrameBoundType.FOLLOWING,
+            PandasApiFrameBoundType.UNBOUNDED_FOLLOWING: FrameBoundType.UNBOUNDED_FOLLOWING
+        }
+        return pandas_api_to_sql_node_map[self]
+
+    def to_pure_expression(self, config: FrameToPureConfig) -> str:
+        pandas_api_to_pure_expr_map = {
+            PandasApiFrameBoundType.UNBOUNDED_PRECEDING: "unbounded()",
+            PandasApiFrameBoundType.PRECEDING: "0",
+            PandasApiFrameBoundType.CURRENT_ROW: "0",
+            PandasApiFrameBoundType.FOLLOWING: "0",
+            PandasApiFrameBoundType.UNBOUNDED_FOLLOWING: "unbounded()"
+        }
+        return pandas_api_to_pure_expr_map[self]
+
+
+class PandasApiFrameBound:
+    type_: "PandasApiFrameBoundType"
+    value: PyLegendOptional[int]
+
+    def __init__(
+            self,
+            type_: "PandasApiFrameBoundType",
+            value: PyLegendOptional[int] = None
+    ) -> None:
+        self.type_ = type_
+        self.value = value
+
+    def to_sql_node(
+            self,
+            query: QuerySpecification,
+            config: FrameToSqlConfig
+    ) -> FrameBound:
+        value_expression = (
+            convert_literal_to_literal_expression(self.value)
+            .to_sql_expression({"w": query}, config)
+            if self.value is not None else None
+        )
+        return FrameBound(
+            type_=self.type_.to_sql_node(query, config),
+            value=value_expression
+        )
+
+    def to_pure_expression(self, config: FrameToPureConfig) -> str:
+        if self._should_consider_value():
+            return convert_literal_to_literal_expression(self.value).to_pure_expression(config)
+        else:
+            return self.type_.to_pure_expression(config)
+
+    def _should_consider_value(self):
+        unbounded_frame_bound_types = {
+            PandasApiFrameBoundType.UNBOUNDED_PRECEDING,
+            PandasApiFrameBoundType.UNBOUNDED_FOLLOWING
+        }
+        if self.type_ in unbounded_frame_bound_types:
+            return False
+        elif self.value is None:
+            return False
+        return True
+
+
+class PandasApiWindowFrameMode(Enum):
+    RANGE = 1,
+    ROWS = 2
+
+    def to_sql_node(
+            self,
+            query: QuerySpecification,
+            config: FrameToSqlConfig
+    ) -> WindowFrameMode:
+        pandas_api_to_sql_node_map = {
+            PandasApiWindowFrameMode.RANGE: WindowFrameMode.RANGE,
+            PandasApiWindowFrameMode.ROWS: WindowFrameMode.ROWS
+        }
+        return pandas_api_to_sql_node_map[self]
+
+    def to_pure_expression(self, config: FrameToPureConfig) -> str:
+        pandas_api_to_pure_expr_map = {
+            PandasApiWindowFrameMode.RANGE: "_range",
+            PandasApiWindowFrameMode.ROWS: "rows"
+        }
+        return pandas_api_to_pure_expr_map[self]
+
+
+class PandasApiWindowFrame:
+    mode: PandasApiWindowFrameMode
+    start: PandasApiFrameBound
+    end: PyLegendOptional[PandasApiFrameBound]
+
+    def __init__(
+            self,
+            mode: PandasApiWindowFrameMode,
+            start: PandasApiFrameBound,
+            end: PyLegendOptional[PandasApiFrameBound]
+    ):
+        self.mode = mode
+        self.start = start
+        self.end = end
+
+    def to_sql_node(
+            self,
+            query: QuerySpecification,
+            config: FrameToSqlConfig
+    ):
+        return WindowFrame(
+            mode=self.mode.to_sql_node(query, config),
+            start=self.start.to_sql_node(query, config),
+            end=(
+                None if self.end is None else
+                self.end.to_sql_node(query, config)
+            )
+        )
+
+    def to_pure_expression(self, config: FrameToPureConfig) -> str:
+        mode_expr = self.mode.to_pure_expression(config)
+        start_expr = self.start.to_pure_expression(config)
+        end_expr = self.end.to_pure_expression(config) if self.end is not None else None
+
+        return f"{mode_expr}({start_expr})" if end_expr is None else f"{mode_expr}({start_expr}, {end_expr})"
 
 
 class PandasApiWindow:
@@ -202,7 +347,7 @@ class PandasApiWindow:
                 [] if self.__order_by is None else
                 [sort_info.to_sql_node(query, config) for sort_info in self.__order_by]
             ),
-            windowFrame=None
+            windowFrame=self.__frame.to_sql_node(query, config)
         )
 
     @staticmethod
@@ -226,7 +371,11 @@ class PandasApiWindow:
             "[]" if self.__order_by is None or len(self.__order_by) == 0
             else "[" + (', '.join([s.to_pure_expression(config) for s in self.__order_by])) + "]"
         )
-        return f"over({partitions_str}{sorts_str})"
+        frame_str = (
+            "" if self.__frame is None
+            else ", " + self.__frame.to_pure_expression(config)
+        )
+        return f"over({partitions_str}{sorts_str}{frame_str})"
 
 
 class PandasApiPartialFrame:

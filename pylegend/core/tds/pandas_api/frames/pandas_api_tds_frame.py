@@ -358,3 +358,12 @@ class PandasApiTdsFrame(PyLegendTdsFrame):
             pct: bool = False
     ) -> "PandasApiTdsFrame":
         pass  # pragma: no cover
+
+    @abstractmethod
+    def expanding(
+            self,
+            min_periods: int = 1,
+            axis: PyLegendUnion[int, str] = 0,
+            method: PyLegendOptional[str] = None
+    ) -> "PandasApiExpandingTdsFrame":
+        pass  # pragma: no cover
