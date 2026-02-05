@@ -405,3 +405,16 @@ class PandasApiGroupbyTdsFrame:
             ascending=ascending,
             pct=pct
         ))
+
+    def expanding(
+            self,
+            min_periods: int = 1,
+            method: PyLegendOptional[str] = None
+    ) -> "PandasApiExpandingTdsFrame":
+        from pylegend.core.tds.pandas_api.frames.pandas_api_expanding_tds_frame import PandasApiExpandingTdsFrame
+        return PandasApiExpandingTdsFrame(
+            base_frame=self,
+            min_periods=min_periods,
+            axis=0,
+            method=method
+        )

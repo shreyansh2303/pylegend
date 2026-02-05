@@ -3,18 +3,25 @@ from pylegend.core.tds.pandas_api.frames.pandas_api_base_tds_frame import Pandas
 from pylegend.core.language import PyLegendPrimitiveOrPythonPrimitive
 from pylegend._typing import (
     PyLegendOptional,
+    PyLegendSequence,
     PyLegendUnion,
 )
 
+
+__all__: PyLegendSequence[str] = [
+    "PandasApiExpandingTdsFrame",
+]
+
+
 class PandasApiExpandingTdsFrame:
-    _base_frame: PandasApiBaseTdsFrame
+    _base_frame: PyLegendUnion[PandasApiBaseTdsFrame, PandasApiBaseTdsFrame]
     _min_periods: int
     _axis: PyLegendUnion[int, str]
     _method: PyLegendOptional[str]
 
     def __init__(
             self,
-            base_frame: PandasApiBaseTdsFrame,
+            base_frame: PyLegendUnion[PandasApiBaseTdsFrame, PandasApiBaseTdsFrame],
             min_periods: int = 1,
             axis: PyLegendUnion[int, str] = 0,
             method: PyLegendOptional[str] = None
@@ -38,7 +45,7 @@ class PandasApiExpandingTdsFrame:
         from pylegend.core.tds.pandas_api.frames.pandas_api_applied_function_tds_frame import (
             PandasApiAppliedFunctionTdsFrame
         )
-        from pylegend.core.tds.pandas_api.frames.functions.pandas_api_window_aggregate_function import (
+        from pylegend.core.tds.pandas_api.frames.functions.window_aggregate_function import (
             PandasApiWindowAggregateFunction
         )
         return PandasApiAppliedFunctionTdsFrame(

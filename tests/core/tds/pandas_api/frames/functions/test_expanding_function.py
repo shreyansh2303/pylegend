@@ -72,8 +72,10 @@ class TestUsageOnBaseFrame:
         expected_pure = '''
             #Table(test_schema.test_table)#
               ->extend(~__internal_pylegend_column__:{r|0})
-              ->extend(over([ascending(~__internal_pylegend_column__)], rows(unbounded(), 0)), ~col1__internal_pylegend_column__:{p,w,r | $r.col1}:{y | $y->plus()})
-              ->extend(over([ascending(~__internal_pylegend_column__)], rows(unbounded(), 0)), ~col2__internal_pylegend_column__:{p,w,r | $r.col2}:{y | $y->plus()})
+              ->extend(over([ascending(~__internal_pylegend_column__)], rows(unbounded(), 0)), ~[
+                col1__internal_pylegend_column__:{p,w,r | $r.col1}:{c | $c->sum()},
+                col2__internal_pylegend_column__:{p,w,r | $r.col2}:{c | $c->sum()}
+              ])
               ->project(~[
                 col1:p|$p.col1__internal_pylegend_column__,
                 col2:p|$p.col2__internal_pylegend_column__
@@ -91,7 +93,7 @@ class TestUsageOnBaseFrame:
 
         frame = frame.expanding().agg({
             "col1": ["sum", lambda x: x.count()],
-            "col2": [lambda x: x.min()]
+            "col2": np.min
         })
 
         expected_sql = '''
@@ -115,12 +117,14 @@ class TestUsageOnBaseFrame:
         expected_pure = '''
             #Table(test_schema.test_table)#
               ->extend(~__internal_pylegend_column__:{r|0})
-              ->extend(over([ascending(~__internal_pylegend_column__)], rows(unbounded(), 0)), ~sum(col1)__internal_pylegend_column__:{p,w,r | $r.col1}:{y | $y->plus()})
-              ->extend(over([ascending(~__internal_pylegend_column__)], rows(unbounded(), 0)), ~count(col1)__internal_pylegend_column__:{p,w,r | $r.col1}:{y | $y->count()})
-              ->extend(over([ascending(~__internal_pylegend_column__)], rows(unbounded(), 0)), ~min(col2)__internal_pylegend_column__:{p,w,r | $r.col2}:{y | $y->min()})
+              ->extend(over([ascending(~__internal_pylegend_column__)], rows(unbounded(), 0)), ~[
+                'sum(col1)__internal_pylegend_column__':{p,w,r | $r.col1}:{c | $c->sum()},
+                'lambda_1(col1)__internal_pylegend_column__':{p,w,r | $r.col1}:{c | $c->count()},
+                col2__internal_pylegend_column__:{p,w,r | $r.col2}:{c | $c->min()}
+              ])
               ->project(~[
-                sum(col1):p|$p.sum(col1)__internal_pylegend_column__,
-                count(col1):p|$p.count(col1)__internal_pylegend_column__,
+                'sum(col1)':p|$p.'sum(col1)__internal_pylegend_column__',
+                'lambda_1(col1)':p|$p.'lambda_1(col1)__internal_pylegend_column__',
                 col2:p|$p.col2__internal_pylegend_column__
               ])
         '''
@@ -141,8 +145,8 @@ class TestUsageOnGroupbyFrame:
 
         expected_sql = '''
             SELECT
-                SUM("root"."value_col") OVER (PARTITION BY "root"."grouping_col" ORDER BY "__internal_pylegend_column__" ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS "value_col",
-                SUM("root"."random_col") OVER (PARTITION BY "root"."grouping_col" ORDER BY "__internal_pylegend_column__" ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS "random_col"
+                SUM("root"."value_col") OVER (PARTITION BY "root"."grouping_col" ORDER BY "root"."__internal_pylegend_column__" ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS "value_col",
+                SUM("root"."random_col") OVER (PARTITION BY "root"."grouping_col" ORDER BY "root"."__internal_pylegend_column__" ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS "random_col"
             FROM
                 (
                     SELECT
@@ -160,10 +164,61 @@ class TestUsageOnGroupbyFrame:
         expected_pure = '''
             #Table(test_schema.test_table)#
               ->extend(~__internal_pylegend_column__:{r|0})
-              ->extend(over(~grouping_col, [ascending(~__internal_pylegend_column__)], rows(unbounded(), 0)), ~value_col__internal_pylegend_column__:{p,w,r | $r.value_col}:{y | $y->plus()})
-              ->extend(over(~grouping_col, [ascending(~__internal_pylegend_column__)], rows(unbounded(), 0)), ~random_col__internal_pylegend_column__:{p,w,r | $r.random_col}:{y | $y->plus()})
+              ->extend(over(~[grouping_col], [ascending(~__internal_pylegend_column__)], rows(unbounded(), 0)), ~[
+                value_col__internal_pylegend_column__:{p,w,r | $r.value_col}:{c | $c->sum()},
+                random_col__internal_pylegend_column__:{p,w,r | $r.random_col}:{c | $c->sum()}
+              ])
               ->project(~[
                 value_col:p|$p.value_col__internal_pylegend_column__,
+                random_col:p|$p.random_col__internal_pylegend_column__
+              ])
+        '''
+        expected_pure = dedent(expected_pure).strip()
+        assert frame.to_pure_query() == expected_pure
+
+    def test_complex_aggregation(self):
+        columns = [
+            PrimitiveTdsColumn.string_column("grouping_col"),
+            PrimitiveTdsColumn.integer_column("value_col"),
+            PrimitiveTdsColumn.float_column("random_col")
+        ]
+        frame: PandasApiTdsFrame = PandasApiTableSpecInputFrame(["test_schema", "test_table"], columns)
+
+        frame = frame.groupby("grouping_col").expanding().agg({
+            "value_col": ["sum", lambda x: x.count()],
+            "random_col": np.min
+        })
+
+        expected_sql = '''
+            SELECT
+                SUM("root"."value_col") OVER (PARTITION BY "root"."grouping_col" ORDER BY "root"."__internal_pylegend_column__" ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS "sum(value_col)",
+                COUNT("root"."value_col") OVER (PARTITION BY "root"."grouping_col" ORDER BY "root"."__internal_pylegend_column__" ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS "lambda_1(value_col)",
+                MIN("root"."random_col") OVER (PARTITION BY "root"."grouping_col" ORDER BY "root"."__internal_pylegend_column__" ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS "random_col"
+            FROM
+                (
+                    SELECT
+                        "root".grouping_col AS "grouping_col",
+                        "root".value_col AS "value_col",
+                        "root".random_col AS "random_col",
+                        0 AS "__internal_pylegend_column__"
+                    FROM
+                        test_schema.test_table AS "root"
+                ) AS "root"
+        '''  # noqa: E501
+        expected_sql = dedent(expected_sql).strip()
+        assert frame.to_sql_query() == expected_sql
+
+        expected_pure = '''
+            #Table(test_schema.test_table)#
+              ->extend(~__internal_pylegend_column__:{r|0})
+              ->extend(over(~[grouping_col], [ascending(~__internal_pylegend_column__)], rows(unbounded(), 0)), ~[
+                'sum(value_col)__internal_pylegend_column__':{p,w,r | $r.value_col}:{c | $c->sum()},
+                'lambda_1(value_col)__internal_pylegend_column__':{p,w,r | $r.value_col}:{c | $c->count()},
+                random_col__internal_pylegend_column__:{p,w,r | $r.random_col}:{c | $c->min()}
+              ])
+              ->project(~[
+                'sum(value_col)':p|$p.'sum(value_col)__internal_pylegend_column__',
+                'lambda_1(value_col)':p|$p.'lambda_1(value_col)__internal_pylegend_column__',
                 random_col:p|$p.random_col__internal_pylegend_column__
               ])
         '''

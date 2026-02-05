@@ -481,6 +481,17 @@ class TestAggregateFunction:
             "#Table(test_schema.test_table)#->select(~[col1])->aggregate(~[col1:{r | $r.col1}:{c | $c->count()}])"
         )
 
+    def test_temp(self):
+        columns = [
+            PrimitiveTdsColumn.integer_column("col1"),
+            PrimitiveTdsColumn.string_column("col2")
+        ]
+        frame: PandasApiTdsFrame = PandasApiTableSpecInputFrame(["test_schema", "test_table"], columns)
+        frame = frame.agg({"col1": "count", "col2": "count"})
+
+        print([str(col) for col in frame.columns()])
+
+
     def test_e2e_aggregate_single_column(self, legend_test_server: PyLegendDict[str, PyLegendUnion[int,]]) -> None:
         frame: PandasApiTdsFrame = simple_person_service_frame_pandas_api(legend_test_server["engine_port"])
         frame = frame.aggregate({'Age': 'sum'})

@@ -312,9 +312,11 @@ class PandasApiWindowFrame:
     def to_pure_expression(self, config: FrameToPureConfig) -> str:
         mode_expr = self.mode.to_pure_expression(config)
         start_expr = self.start.to_pure_expression(config)
-        end_expr = self.end.to_pure_expression(config) if self.end is not None else None
-
-        return f"{mode_expr}({start_expr})" if end_expr is None else f"{mode_expr}({start_expr}, {end_expr})"
+        end_expr = (
+            "" if self.end is None else
+            ", " + self.end.to_pure_expression(config)
+        )
+        return f"{mode_expr}({start_expr}{end_expr})"
 
 
 class PandasApiWindow:
@@ -347,7 +349,10 @@ class PandasApiWindow:
                 [] if self.__order_by is None else
                 [sort_info.to_sql_node(query, config) for sort_info in self.__order_by]
             ),
-            windowFrame=self.__frame.to_sql_node(query, config)
+            windowFrame=(
+                None if self.__frame is None else
+                self.__frame.to_sql_node(query, config)
+            )
         )
 
     @staticmethod
