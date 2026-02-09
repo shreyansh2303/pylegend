@@ -170,7 +170,7 @@ class AssignFunction(PandasApiAppliedFunction):
                 elif isinstance(res, (date, PyLegendDate)):
                     new_cols.append(PrimitiveTdsColumn.date_column(col))
                 else:
-                    raise RuntimeError("Type not supported")
+                    raise RuntimeError("Type not supported", f"type = {type(res)}")
         return new_cols
 
     def validate(self) -> bool:

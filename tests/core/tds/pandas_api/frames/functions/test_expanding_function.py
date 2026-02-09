@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+
 from textwrap import dedent
 
 import numpy as np
@@ -22,7 +24,7 @@ from pylegend.extensions.tds.pandas_api.frames.pandas_api_table_spec_input_frame
 
 
 class TestErrors:
-    def test_invalid_parameters(self):
+    def test_invalid_parameters(self) -> None:
         columns = [PrimitiveTdsColumn.string_column("col1")]
         frame: PandasApiTdsFrame = PandasApiTableSpecInputFrame(["test_schema", "test_table"], columns)
 
@@ -34,16 +36,16 @@ class TestErrors:
         with pytest.raises(NotImplementedError) as v:
             frame.expanding(axis=1)
 
-        assert v.value.args[0] == "The expanding function is only supported for axis=0, but got: axis=1"
+        assert v.value.args[0] == 'The expanding function is only supported for axis=0 or axis="index", but got: axis=1'
 
         with pytest.raises(NotImplementedError) as v:
             frame.expanding(method='single')
 
-        assert v.value.args[0] == "The expanding function does not support the 'single' parameter, but got: method='single'"
+        assert v.value.args[0] == "The expanding function does not support the 'method' parameter, but got: method='single'"
 
 
 class TestUsageOnBaseFrame:
-    def test_simple_sum(self):
+    def test_simple_sum(self) -> None:
         columns = [
             PrimitiveTdsColumn.integer_column("col1"),
             PrimitiveTdsColumn.float_column("col2")
@@ -84,7 +86,7 @@ class TestUsageOnBaseFrame:
         expected_pure = dedent(expected_pure).strip()
         assert frame.to_pure_query() == expected_pure
 
-    def test_complex_aggregation(self):
+    def test_complex_aggregation(self) -> None:
         columns = [
             PrimitiveTdsColumn.integer_column("col1"),
             PrimitiveTdsColumn.float_column("col2")
@@ -133,7 +135,7 @@ class TestUsageOnBaseFrame:
 
 
 class TestUsageOnGroupbyFrame:
-    def test_simple_sum(self):
+    def test_simple_sum(self) -> None:
         columns = [
             PrimitiveTdsColumn.string_column("grouping_col"),
             PrimitiveTdsColumn.integer_column("value_col"),
@@ -176,7 +178,7 @@ class TestUsageOnGroupbyFrame:
         expected_pure = dedent(expected_pure).strip()
         assert frame.to_pure_query() == expected_pure
 
-    def test_complex_aggregation(self):
+    def test_complex_aggregation(self) -> None:
         columns = [
             PrimitiveTdsColumn.string_column("grouping_col"),
             PrimitiveTdsColumn.integer_column("value_col"),
@@ -225,7 +227,7 @@ class TestUsageOnGroupbyFrame:
         expected_pure = dedent(expected_pure).strip()
         assert frame.to_pure_query() == expected_pure
 
-    def test_sum_on_series(self):
+    def test_sum_on_groupby_series(self) -> None:
         columns = [
             PrimitiveTdsColumn.string_column("grouping_col"),
             PrimitiveTdsColumn.integer_column("value_col"),
@@ -240,30 +242,17 @@ class TestUsageOnGroupbyFrame:
                 "root".grouping_col AS "grouping_col",
                 "root".value_col AS "value_col",
                 "root".random_col AS "random_col",
-                SUM("root"."value_col") OVER (PARTITION BY "root"."grouping_col" ORDER BY "__internal_pylegend_column__" ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS "value_col"
+                SUM("root".value_col) OVER (PARTITION BY "root".grouping_col ORDER BY 0 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS "sum_values"
             FROM
-                (
-                    SELECT
-                        "root".grouping_col AS "grouping_col",
-                        "root".value_col AS "value_col",
-                        "root".random_col AS "random_col",
-                        0 AS "__internal_pylegend_column__"
-                    FROM
-                        test_schema.test_table AS "root"
-                ) AS "root"
+                test_schema.test_table AS "root"
         '''  # noqa: E501
         expected_sql = dedent(expected_sql).strip()
         assert frame.to_sql_query() == expected_sql
 
         expected_pure = '''
             #Table(test_schema.test_table)#
-              ->extend(~__internal_pylegend_column__:{r|0})
-              ->extend(over(~grouping_col, [ascending(~__internal_pylegend_column__)], rows(unbounded(), 0)), ~value_col__internal_pylegend_column__:{p,w,r | $r.value_col}:{y | $y->plus()})
-              ->extend(over(~grouping_col, [ascending(~__internal_pylegend_column__)], rows(unbounded(), 0)), ~random_col__internal_pylegend_column__:{p,w,r | $r.random_col}:{y | $y->plus()})
-              ->project(~[
-                value_col:p|$p.value_col__internal_pylegend_column__,
-                random_col:p|$p.random_col__internal_pylegend_column__
-              ])
-        '''
+              ->extend(over(~[grouping_col], [], rows(unbounded(), 0)), ~value_col__internal_pylegend_column__:{p,w,r | $r.value_col}:{c | $c->sum()})
+              ->project(~[grouping_col:c|$c.grouping_col, value_col:c|$c.value_col, random_col:c|$c.random_col, sum_values:c|$c.value_col__internal_pylegend_column__])
+        '''  # noqa: E501
         expected_pure = dedent(expected_pure).strip()
         assert frame.to_pure_query() == expected_pure

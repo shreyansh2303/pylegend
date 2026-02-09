@@ -32,9 +32,7 @@ from pylegend._typing import (
     PyLegendDict,
     TYPE_CHECKING,
 )
-from pylegend.core.language.shared.column_expressions import PyLegendColumnExpression
-from pylegend.core.language.shared.expression import PyLegendExpressionFloatReturn, PyLegendExpressionIntegerReturn, \
-    PyLegendExpressionNumberReturn, PyLegendExpression
+from pylegend.core.language.shared.expression import PyLegendExpressionFloatReturn, PyLegendExpressionIntegerReturn
 from pylegend.core.language.shared.helpers import escape_column_name
 from pylegend.core.sql.metamodel import (
     Expression,
@@ -45,7 +43,7 @@ from pylegend.core.sql.metamodel import (
     SortItem,
     SortItemNullOrdering,
     SortItemOrdering,
-    Window, WindowFrame, Node, WindowFrameMode, FrameBound, FrameBoundType
+    Window, WindowFrame, WindowFrameMode, FrameBound, FrameBoundType
 )
 from pylegend.core.tds.tds_frame import FrameToPureConfig, FrameToSqlConfig
 
@@ -69,6 +67,10 @@ __all__: PyLegendSequence[str] = [
     "PandasApiRowNumberExpression",
     "PandasApiPartialFrame",
     "PandasApiPercentRankExpression",
+    "PandasApiFrameBound",
+    "PandasApiFrameBoundType",
+    "PandasApiWindowFrameMode",
+    "PandasApiDirectSortInfo"
 ]
 
 
@@ -245,7 +247,7 @@ class PandasApiFrameBound:
         else:
             return self.type_.to_pure_expression(config)
 
-    def _should_consider_value(self):
+    def _should_consider_value(self) -> bool:
         unbounded_frame_bound_types = {
             PandasApiFrameBoundType.UNBOUNDED_PRECEDING,
             PandasApiFrameBoundType.UNBOUNDED_FOLLOWING
@@ -299,7 +301,7 @@ class PandasApiWindowFrame:
             self,
             query: QuerySpecification,
             config: FrameToSqlConfig
-    ):
+    ) -> WindowFrame:
         return WindowFrame(
             mode=self.mode.to_sql_node(query, config),
             start=self.start.to_sql_node(query, config),

@@ -29,6 +29,7 @@ from pylegend.core.tds.tds_column import TdsColumn
 if TYPE_CHECKING:
     from pylegend.core.tds.pandas_api.frames.pandas_api_tds_frame import PandasApiTdsFrame
     from pylegend.core.language.pandas_api.pandas_api_groupby_series import GroupbySeries
+    from pylegend.core.tds.pandas_api.frames.pandas_api_expanding_tds_frame import PandasApiExpandingTdsFrame
 
 
 class PandasApiGroupbyTdsFrame:
@@ -410,7 +411,7 @@ class PandasApiGroupbyTdsFrame:
             self,
             min_periods: int = 1,
             method: PyLegendOptional[str] = None
-    ) -> "PandasApiExpandingTdsFrame":
+    ) -> "PandasApiExpandingTdsFrame[PandasApiGroupbyTdsFrame]":
         from pylegend.core.tds.pandas_api.frames.pandas_api_expanding_tds_frame import PandasApiExpandingTdsFrame
         return PandasApiExpandingTdsFrame(
             base_frame=self,
