@@ -205,3 +205,63 @@ class PandasApiExpandingTdsFrame(PandasApiWindowTdsFrame[T], Generic[T]):
                 "The expanding function does not support the 'method' parameter, "
                 f"but got: method={self._method!r}"
             )
+
+
+class PandasApiRollingTdsFrame(PandasApiWindowTdsFrame[T], Generic[T]):
+    _base_frame: T
+    _min_periods: int
+    _axis: PyLegendUnion[int, str]
+    _method: PyLegendOptional[str]
+
+    def __init__(
+            self,
+            base_frame: T,
+            min_periods: int = 1,
+            axis: PyLegendUnion[int, str] = 0,
+            method: PyLegendOptional[str] = None
+    ) -> None:
+        self._base_frame = base_frame
+        self._min_periods = min_periods
+        self._axis = axis
+        self._method = method
+        self._validate()
+
+    def base_frame(self) -> T:
+        return self._base_frame
+
+    def construct_window(self, sorting_column_names: PyLegendOptional[PyLegendList[str]]) -> PandasApiWindow:
+        partition_by: PyLegendOptional[PyLegendList[str]] = None
+        if isinstance(self._base_frame, PandasApiGroupbyTdsFrame):
+            partition_by = [col.get_name() for col in self._base_frame.get_grouping_columns()]
+        elif isinstance(self._base_frame, GroupbySeries):
+            partition_by = [col.get_name() for col in self._base_frame.get_base_frame().get_grouping_columns()]
+
+        order_by = (
+            None if sorting_column_names is None or len(sorting_column_names) == 0 else
+            [PandasApiSortInfo(col, PandasApiSortDirection.ASC) for col in sorting_column_names]
+        )
+
+        start_bound = PandasApiFrameBound(PandasApiFrameBoundType.UNBOUNDED_PRECEDING)
+        end_bound = PandasApiFrameBound(PandasApiFrameBoundType.CURRENT_ROW)
+        window_frame = PandasApiWindowFrame(PandasApiWindowFrameMode.ROWS, start_bound, end_bound)
+
+        return PandasApiWindow(partition_by, order_by, window_frame)
+
+    def _validate(self) -> None:
+        if self._min_periods != 1:
+            raise NotImplementedError(
+                "The expanding function is only supported for min_periods=1, "
+                f"but got: min_periods={self._min_periods!r}"
+            )
+
+        if self._axis not in [0, "index"]:
+            raise NotImplementedError(
+                'The expanding function is only supported for axis=0 or axis="index", '
+                f"but got: axis={self._axis!r}"
+            )
+
+        if self._method is not None:
+            raise NotImplementedError(
+                "The expanding function does not support the 'method' parameter, "
+                f"but got: method={self._method!r}"
+            )

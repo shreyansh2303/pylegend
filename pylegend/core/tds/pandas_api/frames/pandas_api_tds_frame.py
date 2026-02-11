@@ -51,7 +51,7 @@ if TYPE_CHECKING:
     from pylegend.core.tds.pandas_api.frames.functions.iloc import PandasApiIlocIndexer
     from pylegend.core.tds.pandas_api.frames.functions.loc import PandasApiLocIndexer
     from pylegend.core.tds.pandas_api.frames.pandas_api_base_tds_frame import PandasApiBaseTdsFrame
-    from pylegend.core.tds.pandas_api.frames.pandas_api_expanding_tds_frame import PandasApiExpandingTdsFrame
+    from pylegend.core.tds.pandas_api.frames.pandas_api_window_tds_frame import PandasApiExpandingTdsFrame
 
 __all__: PyLegendSequence[str] = [
     "PandasApiTdsFrame"

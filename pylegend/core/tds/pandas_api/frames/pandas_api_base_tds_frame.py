@@ -71,7 +71,7 @@ if TYPE_CHECKING:
     from pylegend.core.tds.pandas_api.frames.pandas_api_groupby_tds_frame import PandasApiGroupbyTdsFrame
     from pylegend.core.tds.pandas_api.frames.functions.iloc import PandasApiIlocIndexer
     from pylegend.core.tds.pandas_api.frames.functions.loc import PandasApiLocIndexer
-    from pylegend.core.tds.pandas_api.frames.pandas_api_expanding_tds_frame import PandasApiExpandingTdsFrame
+    from pylegend.core.tds.pandas_api.frames.pandas_api_window_tds_frame import PandasApiExpandingTdsFrame
 
 __all__: PyLegendSequence[str] = [
     "PandasApiBaseTdsFrame"
@@ -883,7 +883,7 @@ class PandasApiBaseTdsFrame(PandasApiTdsFrame, BaseTdsFrame, metaclass=ABCMeta):
             axis: PyLegendUnion[int, str] = 0,
             method: PyLegendOptional[str] = None
     ) -> "PandasApiExpandingTdsFrame[PandasApiBaseTdsFrame]":
-        from pylegend.core.tds.pandas_api.frames.pandas_api_expanding_tds_frame import PandasApiExpandingTdsFrame
+        from pylegend.core.tds.pandas_api.frames.pandas_api_window_tds_frame import PandasApiExpandingTdsFrame
         return PandasApiExpandingTdsFrame(
             base_frame=self,
             min_periods=min_periods,

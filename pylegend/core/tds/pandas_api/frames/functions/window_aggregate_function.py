@@ -51,7 +51,7 @@ from pylegend.core.tds.pandas_api.frames.helpers.helper_shared import infer_colu
 from pylegend.core.tds.pandas_api.frames.helpers.helper_window_function import get_true_base_frame
 from pylegend.core.tds.pandas_api.frames.pandas_api_applied_function_tds_frame import PandasApiAppliedFunction
 from pylegend.core.tds.pandas_api.frames.pandas_api_base_tds_frame import PandasApiBaseTdsFrame
-from pylegend.core.tds.pandas_api.frames.pandas_api_expanding_tds_frame import PandasApiWindowTdsFrame
+from pylegend.core.tds.pandas_api.frames.pandas_api_window_tds_frame import PandasApiWindowTdsFrame
 from pylegend.core.tds.sql_query_helpers import create_sub_query
 from pylegend.core.tds.tds_frame import (
     FrameToSqlConfig,
