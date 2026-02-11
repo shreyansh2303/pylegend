@@ -48,6 +48,7 @@ from pylegend.core.tds.pandas_api.frames.pandas_api_groupby_tds_frame import Pan
 __all__: PyLegendSequence[str] = [
     "PandasApiWindowTdsFrame",
     "PandasApiExpandingTdsFrame",
+    "PandasApiRollingTdsFrame"
 ]
 
 
@@ -209,20 +210,35 @@ class PandasApiExpandingTdsFrame(PandasApiWindowTdsFrame[T], Generic[T]):
 
 class PandasApiRollingTdsFrame(PandasApiWindowTdsFrame[T], Generic[T]):
     _base_frame: T
+    _window: int
     _min_periods: int
-    _axis: PyLegendUnion[int, str]
+    _center: bool
+    _win_type: PyLegendOptional[str]
+    _on: PyLegendOptional[str]
+    _closed: PyLegendOptional[str]
+    _step: PyLegendOptional[str]
     _method: PyLegendOptional[str]
 
     def __init__(
             self,
             base_frame: T,
-            min_periods: int = 1,
-            axis: PyLegendUnion[int, str] = 0,
+            window: int,
+            min_periods: int = None,
+            center: bool = False,
+            win_type: PyLegendOptional[str] = None,
+            on: PyLegendOptional[str] = None,
+            closed: PyLegendOptional[str] = None,
+            step: PyLegendOptional[str] = None,
             method: PyLegendOptional[str] = None
     ) -> None:
         self._base_frame = base_frame
+        self._window = window
         self._min_periods = min_periods
-        self._axis = axis
+        self._center = center
+        self._win_type = win_type
+        self._on = on
+        self._closed = closed
+        self._step = step
         self._method = method
         self._validate()
 
@@ -250,18 +266,30 @@ class PandasApiRollingTdsFrame(PandasApiWindowTdsFrame[T], Generic[T]):
     def _validate(self) -> None:
         if self._min_periods != 1:
             raise NotImplementedError(
-                "The expanding function is only supported for min_periods=1, "
+                "The rolling function is only supported for min_periods=1, "
                 f"but got: min_periods={self._min_periods!r}"
             )
 
-        if self._axis not in [0, "index"]:
+        if self._win_type is not None:
             raise NotImplementedError(
-                'The expanding function is only supported for axis=0 or axis="index", '
-                f"but got: axis={self._axis!r}"
+                "The rolling function does not support the 'win_type' parameter, "
+                f"but got: win_type={self._win_type!r}"
+            )
+
+        if self._closed is not None:
+            raise NotImplementedError(
+                "The rolling function does not support the 'closed' parameter, "
+                f"but got: closed={self._closed!r}"
+            )
+
+        if self._step is not None:
+            raise NotImplementedError(
+                "The rolling function does not support the 'step' parameter, "
+                f"but got: step={self._step!r}"
             )
 
         if self._method is not None:
             raise NotImplementedError(
-                "The expanding function does not support the 'method' parameter, "
+                "The rolling function does not support the 'method' parameter, "
                 f"but got: method={self._method!r}"
             )
