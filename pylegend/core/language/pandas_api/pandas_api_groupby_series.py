@@ -82,7 +82,11 @@ class GroupbySeries(PyLegendColumnExpression, PyLegendPrimitive, BaseTdsFrame):
     _base_groupby_frame: PandasApiGroupbyTdsFrame
     _applied_function_frame: PyLegendOptional[PandasApiAppliedFunctionTdsFrame]
 
-    def __init__(self, base_groupby_frame: PandasApiGroupbyTdsFrame):
+    def __init__(
+            self,
+            base_groupby_frame: PandasApiGroupbyTdsFrame,
+            applied_function_frame: PyLegendOptional[PandasApiAppliedFunctionTdsFrame] = None
+    ) -> None:
         selected_columns = base_groupby_frame.get_selected_columns()
         assert selected_columns is not None and len(selected_columns) == 1, (
             "To initialize a GroupbySeries object, exactly one column must be selected, "
@@ -93,7 +97,7 @@ class GroupbySeries(PyLegendColumnExpression, PyLegendPrimitive, BaseTdsFrame):
         PyLegendColumnExpression.__init__(self, row=row, column=selected_columns[0].get_name())
 
         self._base_groupby_frame: PandasApiGroupbyTdsFrame = base_groupby_frame
-        self._applied_function_frame = None
+        self._applied_function_frame = applied_function_frame
 
     @property
     def applied_function_frame(self) -> PyLegendOptional[PandasApiAppliedFunctionTdsFrame]:
@@ -316,62 +320,89 @@ class GroupbySeries(PyLegendColumnExpression, PyLegendPrimitive, BaseTdsFrame):
             pct: bool = False,
             axis: PyLegendUnion[int, str] = 0
     ) -> "GroupbySeries":
-        new_series: GroupbySeries
-        if pct:
-            new_series = FloatGroupbySeries(self._base_groupby_frame)
-        else:
-            new_series = IntegerGroupbySeries(self._base_groupby_frame)
-
         applied_function_frame = self._base_groupby_frame.rank(method, ascending, na_option, pct, axis)
         assert isinstance(applied_function_frame, PandasApiAppliedFunctionTdsFrame)
 
-        new_series.applied_function_frame = applied_function_frame
-        return new_series
-
+        if pct:
+            return FloatGroupbySeries(self._base_groupby_frame, applied_function_frame)
+        else:
+            return IntegerGroupbySeries(self._base_groupby_frame, applied_function_frame)
 
 class BooleanGroupbySeries(GroupbySeries, PyLegendBoolean, PyLegendExpressionBooleanReturn):
-    def __init__(self, base_frame: "PandasApiGroupbyTdsFrame"):
-        super().__init__(base_frame)  # pragma: no cover (Boolean column not supported in PURE)
+    def __init__(
+            self,
+            base_groupby_frame: PandasApiGroupbyTdsFrame,
+            applied_function_frame: PyLegendOptional[PandasApiAppliedFunctionTdsFrame] = None
+    ) -> None:
+        super().__init__(base_groupby_frame, applied_function_frame)  # pragma: no cover (Boolean column not supported in PURE)
         PyLegendBoolean.__init__(self, self)  # pragma: no cover (Boolean column not supported in PURE)
 
 
 class StringGroupbySeries(GroupbySeries, PyLegendString, PyLegendExpressionStringReturn):
-    def __init__(self, base_frame: "PandasApiGroupbyTdsFrame"):
-        super().__init__(base_frame)
+    def __init__(
+            self,
+            base_groupby_frame: PandasApiGroupbyTdsFrame,
+            applied_function_frame: PyLegendOptional[PandasApiAppliedFunctionTdsFrame] = None
+    ) -> None:
+        super().__init__(base_groupby_frame, applied_function_frame)
         PyLegendString.__init__(self, self)
 
 
 class NumberGroupbySeries(GroupbySeries, PyLegendNumber, PyLegendExpressionNumberReturn):
-    def __init__(self, base_frame: "PandasApiGroupbyTdsFrame"):
-        super().__init__(base_frame)
+    def __init__(
+            self,
+            base_groupby_frame: PandasApiGroupbyTdsFrame,
+            applied_function_frame: PyLegendOptional[PandasApiAppliedFunctionTdsFrame] = None
+    ) -> None:
+        super().__init__(base_groupby_frame, applied_function_frame)
         PyLegendNumber.__init__(self, self)
 
 
 class IntegerGroupbySeries(NumberGroupbySeries, PyLegendInteger, PyLegendExpressionIntegerReturn):
-    def __init__(self, base_frame: "PandasApiGroupbyTdsFrame"):
-        super().__init__(base_frame)
+    def __init__(
+            self,
+            base_groupby_frame: PandasApiGroupbyTdsFrame,
+            applied_function_frame: PyLegendOptional[PandasApiAppliedFunctionTdsFrame] = None
+    ) -> None:
+        super().__init__(base_groupby_frame, applied_function_frame)
         PyLegendInteger.__init__(self, self)
 
 
 class FloatGroupbySeries(NumberGroupbySeries, PyLegendFloat, PyLegendExpressionFloatReturn):
-    def __init__(self, base_frame: "PandasApiGroupbyTdsFrame"):
-        super().__init__(base_frame)
+    def __init__(
+            self,
+            base_groupby_frame: PandasApiGroupbyTdsFrame,
+            applied_function_frame: PyLegendOptional[PandasApiAppliedFunctionTdsFrame] = None
+    ) -> None:
+        super().__init__(base_groupby_frame, applied_function_frame)
         PyLegendFloat.__init__(self, self)
 
 
 class DateGroupbySeries(GroupbySeries, PyLegendDate, PyLegendExpressionDateReturn):
-    def __init__(self, base_frame: "PandasApiGroupbyTdsFrame"):
-        super().__init__(base_frame)
+    def __init__(
+            self,
+            base_groupby_frame: PandasApiGroupbyTdsFrame,
+            applied_function_frame: PyLegendOptional[PandasApiAppliedFunctionTdsFrame] = None
+    ) -> None:
+        super().__init__(base_groupby_frame, applied_function_frame)
         PyLegendDate.__init__(self, self)
 
 
 class DateTimeGroupbySeries(DateGroupbySeries, PyLegendDateTime, PyLegendExpressionDateTimeReturn):
-    def __init__(self, base_frame: "PandasApiGroupbyTdsFrame"):
-        super().__init__(base_frame)
+    def __init__(
+            self,
+            base_groupby_frame: PandasApiGroupbyTdsFrame,
+            applied_function_frame: PyLegendOptional[PandasApiAppliedFunctionTdsFrame] = None
+    ) -> None:
+        super().__init__(base_groupby_frame, applied_function_frame)
         PyLegendDateTime.__init__(self, self)
 
 
 class StrictDateGroupbySeries(DateGroupbySeries, PyLegendStrictDate, PyLegendExpressionStrictDateReturn):
-    def __init__(self, base_frame: "PandasApiGroupbyTdsFrame"):
-        super().__init__(base_frame)
+    def __init__(
+            self,
+            base_groupby_frame: PandasApiGroupbyTdsFrame,
+            applied_function_frame: PyLegendOptional[PandasApiAppliedFunctionTdsFrame] = None
+    ) -> None:
+        super().__init__(base_groupby_frame, applied_function_frame)
         PyLegendStrictDate.__init__(self, self)
