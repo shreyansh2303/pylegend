@@ -62,6 +62,7 @@ from pylegend.extensions.tds.result_handler import PandasDfReadConfig
 
 if TYPE_CHECKING:
     from pylegend.core.tds.pandas_api.frames.pandas_api_tds_frame import PandasApiTdsFrame
+    from pylegend.core.tds.pandas_api.frames.pandas_api_window_tds_frame import PandasApiExpandingTdsFrame
 
 __all__: PyLegendSequence[str] = [
     "GroupbySeries",
@@ -327,6 +328,20 @@ class GroupbySeries(PyLegendColumnExpression, PyLegendPrimitive, BaseTdsFrame):
 
         new_series.applied_function_frame = applied_function_frame
         return new_series
+
+    def expanding(
+            self,
+            min_periods: int = 1,
+            axis: PyLegendUnion[int, str] = 0,
+            method: PyLegendOptional[str] = None
+    ) -> "PandasApiExpandingTdsFrame[GroupbySeries]":
+        from pylegend.core.tds.pandas_api.frames.pandas_api_window_tds_frame import PandasApiExpandingTdsFrame
+        return PandasApiExpandingTdsFrame(
+            base_frame=self,
+            min_periods=min_periods,
+            axis=axis,
+            method=method
+        )
 
 
 class BooleanGroupbySeries(GroupbySeries, PyLegendBoolean, PyLegendExpressionBooleanReturn):

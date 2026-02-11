@@ -53,15 +53,16 @@ from pylegend.core.sql.metamodel import (
 from pylegend.core.sql.metamodel import QuerySpecification
 from pylegend.core.tds.abstract.frames.base_tds_frame import BaseTdsFrame
 from pylegend.core.tds.pandas_api.frames.functions.filter import PandasApiFilterFunction
-from pylegend.core.tds.pandas_api.frames.pandas_api_applied_function_tds_frame import PandasApiAppliedFunctionTdsFrame
 from pylegend.core.tds.result_handler import ResultHandler
 from pylegend.core.tds.tds_column import TdsColumn
 from pylegend.core.tds.tds_frame import FrameToPureConfig
 from pylegend.core.tds.tds_frame import FrameToSqlConfig
 from pylegend.extensions.tds.result_handler import PandasDfReadConfig
+from pylegend.core.tds.pandas_api.frames.pandas_api_applied_function_tds_frame import PandasApiAppliedFunctionTdsFrame
 
 if TYPE_CHECKING:
     from pylegend.core.tds.pandas_api.frames.pandas_api_tds_frame import PandasApiTdsFrame
+    from pylegend.core.tds.pandas_api.frames.pandas_api_window_tds_frame import PandasApiExpandingTdsFrame
 
 __all__: PyLegendSequence[str] = [
     "Series",
@@ -343,6 +344,20 @@ class Series(PyLegendColumnExpression, PyLegendPrimitive, BaseTdsFrame):
 
         new_series._filtered_frame = applied_function_frame
         return new_series
+
+    def expanding(
+            self,
+            min_periods: int = 1,
+            axis: PyLegendUnion[int, str] = 0,
+            method: PyLegendOptional[str] = None
+    ) -> "PandasApiExpandingTdsFrame[Series]":
+        from pylegend.core.tds.pandas_api.frames.pandas_api_window_tds_frame import PandasApiExpandingTdsFrame
+        return PandasApiExpandingTdsFrame(
+            base_frame=self,
+            min_periods=min_periods,
+            axis=axis,
+            method=method
+        )
 
 
 class BooleanSeries(Series, PyLegendBoolean, PyLegendExpressionBooleanReturn):  # type: ignore

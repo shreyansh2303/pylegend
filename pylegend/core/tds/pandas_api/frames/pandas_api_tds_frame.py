@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 
 from typing_extensions import Concatenate
 
+
 try:
     from typing import ParamSpec
 except Exception:
@@ -49,6 +50,8 @@ if TYPE_CHECKING:
     from pylegend.core.tds.pandas_api.frames.pandas_api_groupby_tds_frame import PandasApiGroupbyTdsFrame
     from pylegend.core.tds.pandas_api.frames.functions.iloc import PandasApiIlocIndexer
     from pylegend.core.tds.pandas_api.frames.functions.loc import PandasApiLocIndexer
+    from pylegend.core.tds.pandas_api.frames.pandas_api_base_tds_frame import PandasApiBaseTdsFrame
+    from pylegend.core.tds.pandas_api.frames.pandas_api_window_tds_frame import PandasApiExpandingTdsFrame
 
 __all__: PyLegendSequence[str] = [
     "PandasApiTdsFrame"
@@ -357,4 +360,13 @@ class PandasApiTdsFrame(PyLegendTdsFrame):
             ascending: bool = True,
             pct: bool = False
     ) -> "PandasApiTdsFrame":
+        pass  # pragma: no cover
+
+    @abstractmethod
+    def expanding(
+            self,
+            min_periods: int = 1,
+            axis: PyLegendUnion[int, str] = 0,
+            method: PyLegendOptional[str] = None
+    ) -> "PandasApiExpandingTdsFrame[PandasApiBaseTdsFrame]":
         pass  # pragma: no cover
