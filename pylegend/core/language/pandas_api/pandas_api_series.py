@@ -84,7 +84,7 @@ class SupportsToSqlExpression(Protocol):
 
 @runtime_checkable
 class SupportsToPureExpression(Protocol):
-    def to_pure_expression(self, config: FrameToPureConfig) -> str:
+    def to_pure_expression(self, config: FrameToPureConfig, **kwargs: str) -> str:
         ...
 
 
@@ -120,11 +120,11 @@ class Series(PyLegendColumnExpression, PyLegendPrimitive, BaseTdsFrame):
 
         return super().to_sql_expression(frame_name_to_base_query_map, config)
 
-    def to_pure_expression(self, config: FrameToPureConfig) -> str:
+    def to_pure_expression(self, config: FrameToPureConfig, **kwargs: str) -> str:
         applied_func = self._filtered_frame.get_applied_function()
         if not isinstance(applied_func, PandasApiFilterFunction):  # pragma: no cover
             if isinstance(applied_func, SupportsToPureExpression):
-                return applied_func.to_pure_expression(config)
+                return applied_func.to_pure_expression(config, **kwargs)
             else:
                 raise NotImplementedError(
                     f"The '{applied_func.name()}' function cannot provide a pure expression"

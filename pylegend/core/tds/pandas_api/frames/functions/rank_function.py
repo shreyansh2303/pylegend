@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import base64
+import json
 
 from pylegend._typing import (
     PyLegendDict,
@@ -174,9 +176,7 @@ class RankFunction(PandasApiAppliedFunction):
             f"{escape_column_name(c[0])}:p|$p.{escape_column_name(c[0] + temp_column_name_suffix)}"
             for c, _ in self.__column_expression_and_window_tuples
         ]
-
         joined_project_cols = ("," + config.separator(2)).join(project_cols)
-
         project_str = (
                 f"->project(~[{config.separator(2)}"
                 f"{joined_project_cols}"
@@ -189,20 +189,21 @@ class RankFunction(PandasApiAppliedFunction):
                 f"{project_str}"
         )
 
-    def to_pure_expression(self, config: FrameToPureConfig) -> PyLegendUnion[str, PureExpression]:
-        temp_column_name_suffix: str = "__internal_pylegend_column__"
-
+    def to_pure_expression(self, config: FrameToPureConfig, **kwargs: str) -> PyLegendUnion[str, PureExpression]:
         self._assert_single_column_in_base_frame()
 
         c, window = self.__column_expression_and_window_tuples[0]
         window_expression: str = window.to_pure_expression(config)
-        extend_str = \
-            f"->extend({window_expression}, ~{self._render_single_column_expression(c, temp_column_name_suffix, config)})"
+        function = c[1].to_pure_expression(config)
 
-        pure_expr = PureExpression.from_prerequisite_expr(
-            extend_str, column_name=escape_column_name(c[0] + temp_column_name_suffix)
-        )
-        return pure_expr
+        rank_function_data = {
+            "window": window_expression,
+            "function": function,
+        }
+        data_json = json.dumps(rank_function_data)
+        base64_encoded_data = base64.b64encode(data_json.encode('utf-8')).decode('utf-8')
+
+        return f"__RankFunction__({base64_encoded_data})"
 
     def base_frame(self) -> PandasApiBaseTdsFrame:
         from pylegend.core.tds.pandas_api.frames.pandas_api_groupby_tds_frame import PandasApiGroupbyTdsFrame
