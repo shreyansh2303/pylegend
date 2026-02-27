@@ -24,7 +24,8 @@ from pylegend._typing import (
     PyLegendSequence,
     PyLegendOptional,
     PyLegendTypeVar,
-    PyLegendUnion
+    PyLegendUnion,
+    PyLegendHashable,
 )
 from pylegend.core.database.sql_to_string import SqlToStringConfig, SqlToStringFormat
 from pylegend.core.language.pandas_api.pandas_api_aggregate_specification import PyLegendAggInput
@@ -57,6 +58,7 @@ from pylegend.core.sql.metamodel import (
 from pylegend.core.sql.metamodel import QuerySpecification
 from pylegend.core.tds.abstract.frames.base_tds_frame import BaseTdsFrame
 from pylegend.core.tds.pandas_api.frames.functions.filter import PandasApiFilterFunction
+from pylegend.core.tds.pandas_api.frames.functions.shift_function import ShiftFunction
 from pylegend.core.tds.pandas_api.frames.functions.rank_function import RankFunction
 from pylegend.core.tds.pandas_api.frames.helpers.series_helper import add_primitive_methods, assert_and_find_core_series, \
     has_window_function
@@ -185,6 +187,7 @@ class Series(PyLegendColumnExpression, PyLegendPrimitive, BaseTdsFrame):
         return config.sql_to_string_generator().generate_sql_string(query, sql_to_string_config)
 
     def to_pure_query(self, config: FrameToPureConfig = FrameToPureConfig()) -> str:
+        zero_column_name = "__INTERNAL_PYLEGEND_COLUMN__"
         temp_column_name_suffix = "__INTERNAL_PYLEGEND_COLUMN__"
         if self.expr is None:
             return self.get_filtered_frame().to_pure_query(config)
@@ -198,18 +201,22 @@ class Series(PyLegendColumnExpression, PyLegendPrimitive, BaseTdsFrame):
         for expr in sub_expressions:
             if isinstance(expr, Series):
                 applied_func = expr.get_filtered_frame().get_applied_function()
-                if isinstance(applied_func, RankFunction):
+                if isinstance(applied_func, (RankFunction, ShiftFunction)):
                     assert has_window_func is False
                     has_window_func = True
-                    c, window = applied_func.construct_column_expression_and_window_tuples()[0]
+                    c, window = applied_func.construct_column_expression_and_window_tuples("r")[0]
                     window_expr = window.to_pure_expression(config)
                     function_expr = c[1].to_pure_expression(config)
 
         extend = ""
         if has_window_func:
+            core_series = assert_and_find_core_series(self)
+            assert isinstance(core_series, Series)
+            if isinstance(core_series.get_filtered_frame().get_applied_function(), ShiftFunction):
+                extend += f"->extend(~{zero_column_name}:{{r | 0}})" + config.separator(1)
             pure_expr = full_expr.to_pure_expression(config)
             temp_name = escape_column_name(col_name + temp_column_name_suffix)
-            extend = f"->extend({window_expr}, ~{temp_name}:{generate_pure_lambda('p,w,r', function_expr)})"
+            extend += f"->extend({window_expr}, ~{temp_name}:{generate_pure_lambda('p,w,r', function_expr)})"
             project = f"->project(~[{escape_column_name(col_name)}:c|{pure_expr}])"
         else:
             project = f"->project(~[{escape_column_name(col_name)}:c|{self.to_pure_expression(config)}])"
@@ -481,6 +488,33 @@ class Series(PyLegendColumnExpression, PyLegendPrimitive, BaseTdsFrame):
 
         new_series._filtered_frame = applied_function_frame
         return new_series
+
+    def shift(
+            self,
+            periods: PyLegendUnion[int, PyLegendSequence[int]] = 1,
+            freq: PyLegendOptional[PyLegendUnion[str, int]] = None,
+            axis: PyLegendUnion[int, str] = 0,
+            fill_value: PyLegendOptional[PyLegendHashable] = None,
+            suffix: PyLegendOptional[str] = None
+    ) -> PyLegendUnion["Series", "PandasApiTdsFrame"]:
+        if self._expr is not None:  # pragma: no cover
+            error_msg = '''
+                Applying shift function to a computed series expression is not supported yet.
+                For example,
+                    not supported: (frame['col'] + 5).shift()
+                    supported: frame['col'].shift() + 5
+            '''
+            error_msg = dedent(error_msg).strip()
+            raise NotImplementedError(error_msg)
+
+        if isinstance(periods, int):
+            new_series = self.__class__(self.get_base_frame(), self.columns()[0].get_name())
+            applied_function_frame = self._filtered_frame.shift(periods, freq, axis, fill_value, suffix)
+            assert isinstance(applied_function_frame, PandasApiAppliedFunctionTdsFrame)
+            new_series._filtered_frame = applied_function_frame
+            return new_series
+        else:
+            return self._filtered_frame.shift(periods, freq, axis, fill_value, suffix)
 
 
 @add_primitive_methods
